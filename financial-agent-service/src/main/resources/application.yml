@@ -1,0 +1,16 @@
+server:
+  port: ${FINANCIAL_AGENT_SERVICE_PORT:8083}
+
+spring:
+  application:
+    name: financial-agent-service
+  flyway:
+    enabled: false
+    schemas: ${AGENT_DB_SCHEMA:financial_agent_service}
+    locations: classpath:db/migration
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

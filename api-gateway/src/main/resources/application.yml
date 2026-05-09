@@ -1,0 +1,29 @@
+server:
+  port: ${GATEWAY_PORT:8080}
+
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      routes:
+        - id: auth-service
+          uri: ${AUTH_SERVICE_URI:http://auth-service:8081}
+          predicates:
+            - Path=/api/v1/auth/**
+        - id: conversation-service
+          uri: ${CONVERSATION_SERVICE_URI:http://conversation-service:8082}
+          predicates:
+            - Path=/api/v1/conversations/**,/api/v1/agent-tasks/**
+        - id: health
+          uri: no://op
+          predicates:
+            - Path=/health
+          filters:
+            - SetStatus=200
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

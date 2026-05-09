@@ -1,0 +1,16 @@
+server:
+  port: ${AUTH_SERVICE_PORT:8081}
+
+spring:
+  application:
+    name: auth-service
+  flyway:
+    enabled: false
+    schemas: ${AUTH_DB_SCHEMA:auth_service}
+    locations: classpath:db/migration
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
