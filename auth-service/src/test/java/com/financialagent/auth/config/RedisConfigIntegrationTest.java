@@ -41,6 +41,8 @@ class RedisConfigIntegrationTest {
     registry.add("spring.data.redis.password", () -> "");
     registry.add("spring.data.redis.timeout", () -> "2s");
     registry.add("spring.data.redis.connect-timeout", () -> "2s");
+    registry.add("auth.jwt.private-key", TestJwtKeys::privateKey);
+    registry.add("auth.jwt.public-key", TestJwtKeys::publicKey);
   }
 
   @Test

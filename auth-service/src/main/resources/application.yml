@@ -31,3 +31,10 @@ management:
 auth:
   refresh-token:
     ttl: ${AUTH_REFRESH_TOKEN_TTL:7d}
+  jwt:
+    private-key: ${AUTH_JWT_PRIVATE_KEY:}
+    public-key: ${AUTH_JWT_PUBLIC_KEY:}
+    issuer: ${AUTH_JWT_ISSUER:https://auth.local}
+    audience: ${AUTH_JWT_AUDIENCE:https://api.local}
+    access-token-ttl: ${AUTH_JWT_ACCESS_TOKEN_TTL:15m}
+    key-id: ${AUTH_JWT_KEY_ID:auth-service-local}
