@@ -11,27 +11,27 @@ import org.springframework.mock.web.MockHttpServletResponse;
 
 class CorrelationIdFilterTest {
 
-    private final CorrelationIdFilter filter = new CorrelationIdFilter();
+  private final CorrelationIdFilter filter = new CorrelationIdFilter();
 
-    @Test
-    void echoesExistingCorrelationId() throws ServletException, IOException {
-        MockHttpServletRequest request = new MockHttpServletRequest();
-        MockHttpServletResponse response = new MockHttpServletResponse();
-        request.addHeader(CorrelationIdFilter.CORRELATION_ID_HEADER, "test-correlation-id");
+  @Test
+  void echoesExistingCorrelationId() throws ServletException, IOException {
+    MockHttpServletRequest request = new MockHttpServletRequest();
+    MockHttpServletResponse response = new MockHttpServletResponse();
+    request.addHeader(CorrelationIdFilter.CORRELATION_ID_HEADER, "test-correlation-id");
 
-        filter.doFilter(request, response, new MockFilterChain());
+    filter.doFilter(request, response, new MockFilterChain());
 
-        assertThat(response.getHeader(CorrelationIdFilter.CORRELATION_ID_HEADER))
-                .isEqualTo("test-correlation-id");
-    }
+    assertThat(response.getHeader(CorrelationIdFilter.CORRELATION_ID_HEADER))
+        .isEqualTo("test-correlation-id");
+  }
 
-    @Test
-    void generatesMissingCorrelationId() throws ServletException, IOException {
-        MockHttpServletRequest request = new MockHttpServletRequest();
-        MockHttpServletResponse response = new MockHttpServletResponse();
+  @Test
+  void generatesMissingCorrelationId() throws ServletException, IOException {
+    MockHttpServletRequest request = new MockHttpServletRequest();
+    MockHttpServletResponse response = new MockHttpServletResponse();
 
-        filter.doFilter(request, response, new MockFilterChain());
+    filter.doFilter(request, response, new MockFilterChain());
 
-        assertThat(response.getHeader(CorrelationIdFilter.CORRELATION_ID_HEADER)).isNotBlank();
-    }
+    assertThat(response.getHeader(CorrelationIdFilter.CORRELATION_ID_HEADER)).isNotBlank();
+  }
 }

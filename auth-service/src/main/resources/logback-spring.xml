@@ -8,6 +8,14 @@
         </encoder>
     </appender>
 
+    <springProfile name="local,dev">
+        <logger name="com.financialagent" level="DEBUG"/>
+    </springProfile>
+
+    <springProfile name="prod">
+        <logger name="com.financialagent" level="INFO"/>
+    </springProfile>
+
     <root level="INFO">
         <appender-ref ref="CONSOLE"/>
     </root>
