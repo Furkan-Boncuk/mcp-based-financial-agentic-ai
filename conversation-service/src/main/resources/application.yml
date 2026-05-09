@@ -4,10 +4,16 @@ server:
 spring:
   application:
     name: conversation-service
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:mcp_db}
+    username: ${POSTGRES_USER:postgres}
+    password: ${POSTGRES_PASSWORD:postgres}
+    driver-class-name: org.postgresql.Driver
   flyway:
-    enabled: false
+    enabled: ${FLYWAY_ENABLED:true}
     schemas: ${CONVERSATION_DB_SCHEMA:conversation_service}
     locations: classpath:db/migration
+    create-schemas: true
 
 management:
   endpoints:

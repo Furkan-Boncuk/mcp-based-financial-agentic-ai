@@ -15,12 +15,6 @@ spring:
           uri: ${CONVERSATION_SERVICE_URI:http://conversation-service:8082}
           predicates:
             - Path=/api/v1/conversations/**,/api/v1/agent-tasks/**
-        - id: health
-          uri: no://op
-          predicates:
-            - Path=/health
-          filters:
-            - SetStatus=200
 
 management:
   endpoints:
