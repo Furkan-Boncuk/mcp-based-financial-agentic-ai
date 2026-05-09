@@ -1,5 +1,7 @@
 package com.financialagent.gateway.security;
 
+import com.financialagent.gateway.common.web.CorrelationIdFilter;
+import com.financialagent.gateway.config.GatewayCorsProperties;
 import com.financialagent.gateway.config.GatewayJwtProperties;
 import java.security.KeyFactory;
 import java.security.interfaces.RSAPublicKey;
@@ -9,6 +11,7 @@ import java.util.List;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.convert.converter.Converter;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AbstractAuthenticationToken;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.config.web.server.ServerHttpSecurity;
@@ -24,6 +27,9 @@ import org.springframework.security.oauth2.jwt.NimbusReactiveJwtDecoder;
 import org.springframework.security.oauth2.jwt.ReactiveJwtDecoder;
 import org.springframework.security.web.server.SecurityWebFilterChain;
 import org.springframework.security.web.server.context.NoOpServerSecurityContextRepository;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.reactive.CorsConfigurationSource;
+import org.springframework.web.cors.reactive.UrlBasedCorsConfigurationSource;
 import reactor.core.publisher.Mono;
 
 @Configuration
@@ -39,8 +45,11 @@ public class SecurityConfig {
 
   @Bean
   SecurityWebFilterChain securityWebFilterChain(
-      ServerHttpSecurity http, ProblemAuthenticationEntryPoint authenticationEntryPoint) {
-    return http.csrf(ServerHttpSecurity.CsrfSpec::disable)
+      ServerHttpSecurity http,
+      ProblemAuthenticationEntryPoint authenticationEntryPoint,
+      CorsConfigurationSource corsConfigurationSource) {
+    return http.cors(cors -> cors.configurationSource(corsConfigurationSource))
+        .csrf(ServerHttpSecurity.CsrfSpec::disable)
         .httpBasic(ServerHttpSecurity.HttpBasicSpec::disable)
         .formLogin(ServerHttpSecurity.FormLoginSpec::disable)
         .logout(ServerHttpSecurity.LogoutSpec::disable)
@@ -48,12 +57,32 @@ public class SecurityConfig {
         .exceptionHandling(spec -> spec.authenticationEntryPoint(authenticationEntryPoint))
         .authorizeExchange(
             exchanges ->
-                exchanges.pathMatchers(PUBLIC_PATHS).permitAll().anyExchange().authenticated())
+                exchanges
+                    .pathMatchers(HttpMethod.OPTIONS, "/**")
+                    .permitAll()
+                    .pathMatchers(PUBLIC_PATHS)
+                    .permitAll()
+                    .anyExchange()
+                    .authenticated())
         .oauth2ResourceServer(
             spec ->
                 spec.authenticationEntryPoint(authenticationEntryPoint)
                     .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter())))
         .build();
+  }
+
+  @Bean
+  CorsConfigurationSource corsConfigurationSource(GatewayCorsProperties properties) {
+    CorsConfiguration configuration = new CorsConfiguration();
+    configuration.setAllowedOrigins(properties.allowedOrigins());
+    configuration.setAllowedMethods(properties.allowedMethods());
+    configuration.setAllowedHeaders(properties.allowedHeaders());
+    configuration.setAllowCredentials(properties.allowCredentials());
+    configuration.setExposedHeaders(List.of(CorrelationIdFilter.CORRELATION_ID_HEADER));
+
+    UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+    source.registerCorsConfiguration("/**", configuration);
+    return source;
   }
 
   @Bean
