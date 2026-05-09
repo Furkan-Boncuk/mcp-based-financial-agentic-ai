@@ -4,17 +4,42 @@ server:
 spring:
   application:
     name: api-gateway
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
   cloud:
     gateway:
+      default-filters:
+        - name: RequestRateLimiter
+          args:
+            rate-limiter: "#{@ipRateLimiter}"
+            key-resolver: "#{@ipKeyResolver}"
       routes:
         - id: auth-service
           uri: ${AUTH_SERVICE_URI:http://auth-service:8081}
           predicates:
             - Path=/api/v1/auth/**
+        - id: conversation-message-submit
+          uri: ${CONVERSATION_SERVICE_URI:http://conversation-service:8082}
+          predicates:
+            - Path=/api/v1/conversations/*/messages
+            - Method=POST
+          filters:
+            - name: RequestRateLimiter
+              args:
+                rate-limiter: "#{@messageSubmitRateLimiter}"
+                key-resolver: "#{@userKeyResolver}"
         - id: conversation-service
           uri: ${CONVERSATION_SERVICE_URI:http://conversation-service:8082}
           predicates:
             - Path=/api/v1/conversations/**,/api/v1/agent-tasks/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                rate-limiter: "#{@userRateLimiter}"
+                key-resolver: "#{@userKeyResolver}"
 
 management:
   endpoints:
@@ -32,3 +57,10 @@ gateway:
     allowed-methods: ${CORS_ALLOWED_METHODS:GET,POST,PUT,DELETE,OPTIONS}
     allowed-headers: ${CORS_ALLOWED_HEADERS:Authorization,Content-Type,X-Correlation-ID,Idempotency-Key}
     allow-credentials: ${CORS_ALLOW_CREDENTIALS:true}
+  rate-limit:
+    per-user-per-minute: ${RATE_LIMIT_PER_USER_PER_MINUTE:100}
+    per-user-burst-capacity: ${RATE_LIMIT_PER_USER_BURST_CAPACITY:100}
+    per-ip-per-minute: ${RATE_LIMIT_PER_IP_PER_MINUTE:1000}
+    per-ip-burst-capacity: ${RATE_LIMIT_PER_IP_BURST_CAPACITY:1000}
+    message-submit-per-minute: ${RATE_LIMIT_MESSAGE_SUBMIT_PER_MINUTE:20}
+    message-submit-burst-capacity: ${RATE_LIMIT_MESSAGE_SUBMIT_BURST_CAPACITY:20}

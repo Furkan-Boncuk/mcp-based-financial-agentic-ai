@@ -13,6 +13,7 @@ services:
       GATEWAY_PORT: 8080
       AUTH_SERVICE_URI: http://auth-service:8081
       CONVERSATION_SERVICE_URI: http://conversation-service:8082
+      REDIS_HOST: redis
     ports:
       - "${GATEWAY_PORT:-8080}:8080"
     depends_on:
@@ -20,6 +21,8 @@ services:
         condition: service_started
       conversation-service:
         condition: service_started
+      redis:
+        condition: service_healthy
     networks:
       - mcp_network
 
