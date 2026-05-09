@@ -9,6 +9,7 @@ public enum ErrorCode {
   AUTH_EMAIL_EXISTS(HttpStatus.CONFLICT, "Email already exists"),
   AUTH_TOKEN_EXPIRED(HttpStatus.UNAUTHORIZED, "Authentication token expired"),
   AUTH_REFRESH_REVOKED(HttpStatus.UNAUTHORIZED, "Refresh token revoked"),
+  AUTH_REDIS_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "Refresh token store unavailable"),
   CONVERSATION_NOT_FOUND(HttpStatus.NOT_FOUND, "Conversation not found");
 
   private final HttpStatus status;
