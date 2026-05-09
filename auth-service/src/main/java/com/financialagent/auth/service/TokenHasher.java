@@ -22,11 +22,7 @@ public class TokenHasher {
 
   private final SecureRandom secureRandom;
 
-  public TokenHasher() {
-    this(new SecureRandom());
-  }
-
-  TokenHasher(SecureRandom secureRandom) {
+  public TokenHasher(SecureRandom secureRandom) {
     this.secureRandom = secureRandom;
   }
 

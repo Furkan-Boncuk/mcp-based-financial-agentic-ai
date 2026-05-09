@@ -21,3 +21,9 @@ management:
     web:
       exposure:
         include: health,info
+
+gateway:
+  jwt:
+    public-key: ${GATEWAY_JWT_PUBLIC_KEY:}
+    issuer: ${GATEWAY_JWT_ISSUER:https://auth.local}
+    audience: ${GATEWAY_JWT_AUDIENCE:https://api.local}

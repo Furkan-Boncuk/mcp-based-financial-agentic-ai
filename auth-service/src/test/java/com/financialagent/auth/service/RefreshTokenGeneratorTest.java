@@ -6,13 +6,14 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.financialagent.auth.common.exception.ServiceException;
 import com.financialagent.auth.domain.GeneratedRefreshToken;
 import com.financialagent.auth.domain.ParsedRefreshToken;
+import java.security.SecureRandom;
 import java.util.HashSet;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 class RefreshTokenGeneratorTest {
 
-  private final RefreshTokenGenerator generator = new RefreshTokenGenerator();
+  private final RefreshTokenGenerator generator = new RefreshTokenGenerator(new SecureRandom());
 
   @Test
   void generatesUniqueTokensWithExtractableSessionAndSecret() {

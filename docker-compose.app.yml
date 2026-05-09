@@ -1,0 +1,93 @@
+services:
+  api-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        MODULE: api-gateway
+    image: mcp-financial-agent/api-gateway:local
+    container_name: mcp_api_gateway
+    env_file:
+      - .env
+    environment:
+      GATEWAY_PORT: 8080
+      AUTH_SERVICE_URI: http://auth-service:8081
+      CONVERSATION_SERVICE_URI: http://conversation-service:8082
+    ports:
+      - "${GATEWAY_PORT:-8080}:8080"
+    depends_on:
+      auth-service:
+        condition: service_started
+      conversation-service:
+        condition: service_started
+    networks:
+      - mcp_network
+
+  auth-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        MODULE: auth-service
+    image: mcp-financial-agent/auth-service:local
+    container_name: mcp_auth_service
+    env_file:
+      - .env
+    environment:
+      AUTH_SERVICE_PORT: 8081
+      POSTGRES_HOST: postgres
+      REDIS_HOST: redis
+    ports:
+      - "${AUTH_SERVICE_PORT:-8081}:8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - mcp_network
+
+  conversation-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        MODULE: conversation-service
+    image: mcp-financial-agent/conversation-service:local
+    container_name: mcp_conversation_service
+    env_file:
+      - .env
+    environment:
+      CONVERSATION_SERVICE_PORT: 8082
+      POSTGRES_HOST: postgres
+    ports:
+      - "${CONVERSATION_SERVICE_PORT:-8082}:8082"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - mcp_network
+
+  financial-agent-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        MODULE: financial-agent-service
+    image: mcp-financial-agent/financial-agent-service:local
+    container_name: mcp_financial_agent_service
+    env_file:
+      - .env
+    environment:
+      FINANCIAL_AGENT_SERVICE_PORT: 8083
+      POSTGRES_HOST: postgres
+      RABBITMQ_HOST: rabbitmq
+    ports:
+      - "${FINANCIAL_AGENT_SERVICE_PORT:-8083}:8083"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - mcp_network

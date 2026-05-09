@@ -1,0 +1,11 @@
+.git
+.idea
+.vscode
+**/target
+**/.mvn
+**/.gradle
+*.iml
+*.log
+.env
+.env.*
+!.env.example

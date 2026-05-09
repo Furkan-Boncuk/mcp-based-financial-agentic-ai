@@ -21,6 +21,7 @@ public class JwtKeyService {
   private final JwtProperties properties;
   private RSAKey signingKey;
   private RSAKey publicJwk;
+  private RSAPublicKey publicKey;
 
   public JwtKeyService(JwtProperties properties) {
     this.properties = properties;
@@ -30,7 +31,7 @@ public class JwtKeyService {
   void initialize() {
     try {
       RSAPrivateKey privateKey = parsePrivateKey(properties.privateKey());
-      RSAPublicKey publicKey = parsePublicKey(properties.publicKey());
+      publicKey = parsePublicKey(properties.publicKey());
       signingKey =
           new RSAKey.Builder(publicKey).privateKey(privateKey).keyID(properties.keyId()).build();
       publicJwk = signingKey.toPublicJWK();
@@ -50,8 +51,8 @@ public class JwtKeyService {
     return new JWKSet(publicJwk).toJSONObject();
   }
 
-  RSAKey publicJwk() {
-    return publicJwk;
+  public RSAPublicKey publicKey() {
+    return publicKey;
   }
 
   private RSAPrivateKey parsePrivateKey(String value) {

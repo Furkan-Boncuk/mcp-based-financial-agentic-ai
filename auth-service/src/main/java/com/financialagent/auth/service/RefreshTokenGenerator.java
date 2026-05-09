@@ -17,11 +17,7 @@ public class RefreshTokenGenerator {
 
   private final SecureRandom secureRandom;
 
-  public RefreshTokenGenerator() {
-    this(new SecureRandom());
-  }
-
-  RefreshTokenGenerator(SecureRandom secureRandom) {
+  public RefreshTokenGenerator(SecureRandom secureRandom) {
     this.secureRandom = secureRandom;
   }
 

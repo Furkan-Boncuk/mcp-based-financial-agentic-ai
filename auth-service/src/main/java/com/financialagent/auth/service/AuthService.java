@@ -60,30 +60,7 @@ public class AuthService {
       TokenHasher tokenHasher,
       RefreshTokenStore refreshTokenStore,
       UserMapper userMapper,
-      @Value("${auth.refresh-token.ttl:7d}") Duration refreshTokenTtl) {
-    this(
-        userRepository,
-        auditEventRepository,
-        passwordEncoder,
-        jwtTokenService,
-        refreshTokenGenerator,
-        tokenHasher,
-        refreshTokenStore,
-        userMapper,
-        refreshTokenTtl,
-        Clock.systemUTC());
-  }
-
-  AuthService(
-      UserRepository userRepository,
-      AuthAuditEventRepository auditEventRepository,
-      PasswordEncoder passwordEncoder,
-      JwtTokenService jwtTokenService,
-      RefreshTokenGenerator refreshTokenGenerator,
-      TokenHasher tokenHasher,
-      RefreshTokenStore refreshTokenStore,
-      UserMapper userMapper,
-      Duration refreshTokenTtl,
+      @Value("${auth.refresh-token.ttl:7d}") Duration refreshTokenTtl,
       Clock clock) {
     this.userRepository = userRepository;
     this.auditEventRepository = auditEventRepository;

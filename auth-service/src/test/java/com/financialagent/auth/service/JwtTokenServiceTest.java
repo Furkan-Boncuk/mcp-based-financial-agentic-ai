@@ -16,6 +16,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 
 class JwtTokenServiceTest {
 
@@ -26,8 +29,9 @@ class JwtTokenServiceTest {
 
   @Test
   void generatesRs256AccessTokenWithRequiredClaims() throws Exception {
-    JwtKeyService keyService = jwtKeyService(jwtProperties());
-    JwtTokenService tokenService = new JwtTokenService(jwtProperties(), keyService);
+    JwtProperties properties = jwtProperties();
+    JwtKeyService keyService = jwtKeyService(properties);
+    JwtTokenService tokenService = jwtTokenService(properties, keyService);
     UUID userId = UUID.randomUUID();
 
     GeneratedAccessToken generated =
@@ -51,8 +55,9 @@ class JwtTokenServiceTest {
 
   @Test
   void accessTokenExpiresAfterConfiguredTtl() throws Exception {
-    JwtKeyService keyService = jwtKeyService(jwtProperties());
-    JwtTokenService tokenService = new JwtTokenService(jwtProperties(), keyService);
+    JwtProperties properties = jwtProperties();
+    JwtKeyService keyService = jwtKeyService(properties);
+    JwtTokenService tokenService = jwtTokenService(properties, keyService);
 
     GeneratedAccessToken generated =
         tokenService.generateAccessToken(
@@ -71,8 +76,9 @@ class JwtTokenServiceTest {
 
   @Test
   void exposesPublicJwksWithoutPrivateKeyMaterial() {
-    JwtKeyService keyService = jwtKeyService(jwtProperties());
-    JwtTokenService tokenService = new JwtTokenService(jwtProperties(), keyService);
+    JwtProperties properties = jwtProperties();
+    JwtKeyService keyService = jwtKeyService(properties);
+    JwtTokenService tokenService = jwtTokenService(properties, keyService);
 
     Map<String, Object> jwks = tokenService.publicJwks();
     List<?> keys = (List<?>) jwks.get("keys");
@@ -83,6 +89,20 @@ class JwtTokenServiceTest {
     assertThat(publicKey.containsKey("p")).isFalse();
     assertThat(publicKey.containsKey("q")).isFalse();
     assertThat(jwks.toString()).contains(KEY_ID);
+  }
+
+  @Test
+  void extractsUserIdFromGeneratedAccessTokenWithSpringJwtDecoder() {
+    JwtProperties properties = jwtProperties();
+    JwtKeyService keyService = jwtKeyService(properties);
+    JwtTokenService tokenService = jwtTokenService(properties, keyService);
+    UUID userId = UUID.randomUUID();
+
+    GeneratedAccessToken generated =
+        tokenService.generateAccessToken(
+            new AccessTokenClaims(userId, "user@example.com", List.of("USER")));
+
+    assertThat(tokenService.requireUserId("Bearer " + generated.token())).isEqualTo(userId);
   }
 
   @Test
@@ -104,6 +124,16 @@ class JwtTokenServiceTest {
     JwtKeyService keyService = new JwtKeyService(properties);
     keyService.initialize();
     return keyService;
+  }
+
+  private JwtTokenService jwtTokenService(JwtProperties properties, JwtKeyService keyService) {
+    return new JwtTokenService(properties, keyService, jwtDecoder(keyService));
+  }
+
+  private JwtDecoder jwtDecoder(JwtKeyService keyService) {
+    return NimbusJwtDecoder.withPublicKey(keyService.publicKey())
+        .signatureAlgorithm(SignatureAlgorithm.RS256)
+        .build();
   }
 
   private JwtProperties jwtProperties() {

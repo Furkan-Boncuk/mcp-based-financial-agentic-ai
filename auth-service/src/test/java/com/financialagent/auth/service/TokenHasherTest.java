@@ -5,11 +5,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.financialagent.auth.common.exception.ServiceException;
 import java.nio.charset.StandardCharsets;
+import java.security.SecureRandom;
 import org.junit.jupiter.api.Test;
 
 class TokenHasherTest {
 
-  private final TokenHasher tokenHasher = new TokenHasher();
+  private final TokenHasher tokenHasher = new TokenHasher(new SecureRandom());
 
   @Test
   void hashesAndVerifiesRawSecret() {

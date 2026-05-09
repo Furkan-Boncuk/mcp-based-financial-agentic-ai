@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Repository;
@@ -30,7 +31,7 @@ public class RedisRefreshTokenStore implements RefreshTokenStore {
   private final Duration refreshTokenTtl;
 
   public RedisRefreshTokenStore(
-      RedisTemplate<String, String> redisTemplate,
+      @Qualifier("redisTemplate") RedisTemplate<String, String> redisTemplate,
       ObjectMapper objectMapper,
       @Value("${auth.refresh-token.ttl:7d}") Duration refreshTokenTtl) {
     this.redisTemplate = redisTemplate;
