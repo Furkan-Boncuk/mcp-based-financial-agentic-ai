@@ -9,8 +9,10 @@ import com.nimbusds.jose.JOSEException;
 import com.nimbusds.jose.JWSAlgorithm;
 import com.nimbusds.jose.JWSHeader;
 import com.nimbusds.jose.crypto.RSASSASigner;
+import com.nimbusds.jose.crypto.RSASSAVerifier;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
+import java.text.ParseException;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Date;
@@ -67,5 +69,39 @@ public class JwtTokenService {
 
   public Map<String, Object> publicJwks() {
     return jwtKeyService.jwks();
+  }
+
+  public UUID requireUserId(String authorizationHeader) {
+    String token = bearerToken(authorizationHeader);
+    try {
+      SignedJWT signedJwt = SignedJWT.parse(token);
+      if (!signedJwt.verify(new RSASSAVerifier(jwtKeyService.publicJwk()))) {
+        throw new ServiceException(ErrorCode.AUTH_INVALID_CREDENTIALS);
+      }
+
+      JWTClaimsSet claims = signedJwt.getJWTClaimsSet();
+      if (claims.getExpirationTime() == null
+          || claims.getExpirationTime().toInstant().isBefore(Instant.now())) {
+        throw new ServiceException(ErrorCode.AUTH_TOKEN_EXPIRED);
+      }
+      if (!properties.issuer().equals(claims.getIssuer())
+          || !claims.getAudience().contains(properties.audience())) {
+        throw new ServiceException(ErrorCode.AUTH_INVALID_CREDENTIALS);
+      }
+      return UUID.fromString(claims.getStringClaim("userId"));
+    } catch (ParseException | JOSEException | IllegalArgumentException exception) {
+      throw new ServiceException(ErrorCode.AUTH_INVALID_CREDENTIALS);
+    }
+  }
+
+  private String bearerToken(String authorizationHeader) {
+    if (authorizationHeader == null || !authorizationHeader.startsWith("Bearer ")) {
+      throw new ServiceException(ErrorCode.AUTH_INVALID_CREDENTIALS);
+    }
+    String token = authorizationHeader.substring("Bearer ".length()).trim();
+    if (token.isBlank()) {
+      throw new ServiceException(ErrorCode.AUTH_INVALID_CREDENTIALS);
+    }
+    return token;
   }
 }

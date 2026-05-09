@@ -50,6 +50,10 @@ public class JwtKeyService {
     return new JWKSet(publicJwk).toJSONObject();
   }
 
+  RSAKey publicJwk() {
+    return publicJwk;
+  }
+
   private RSAPrivateKey parsePrivateKey(String value) {
     if (value == null || value.isBlank()) {
       throw invalidKeyConfiguration();
