@@ -72,3 +72,10 @@ agent:
       retry-1s: 1s
       retry-5s: 5s
       retry-15s: 15s
+    outbox:
+      enabled: ${OUTBOX_PUBLISHER_ENABLED:true}
+      fixed-delay: ${OUTBOX_PUBLISHER_FIXED_DELAY:5s}
+      confirm-timeout: ${OUTBOX_PUBLISHER_CONFIRM_TIMEOUT:5s}
+      retry-delay: ${OUTBOX_PUBLISHER_RETRY_DELAY:10s}
+      max-attempts: ${OUTBOX_PUBLISHER_MAX_ATTEMPTS:10}
+      stale-threshold: ${OUTBOX_PUBLISHER_STALE_THRESHOLD:5m}

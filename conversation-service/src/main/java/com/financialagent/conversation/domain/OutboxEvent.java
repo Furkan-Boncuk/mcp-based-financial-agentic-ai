@@ -7,6 +7,7 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
@@ -166,5 +167,43 @@ public class OutboxEvent {
 
   public Instant availableAt() {
     return availableAt;
+  }
+
+  public Instant publishedAt() {
+    return publishedAt;
+  }
+
+  public int attempts() {
+    return attempts;
+  }
+
+  public String lastError() {
+    return lastError;
+  }
+
+  public void markPublished(Instant publishedAt) {
+    this.status = OutboxEventStatus.PUBLISHED;
+    this.publishedAt = publishedAt;
+    this.lastError = null;
+  }
+
+  public void markPublishFailed(
+      String errorMessage, Instant now, Duration retryDelay, int maxAttempts) {
+    attempts++;
+    lastError = sanitizedError(errorMessage);
+    if (attempts >= maxAttempts) {
+      status = OutboxEventStatus.FAILED;
+      availableAt = now;
+      return;
+    }
+    status = OutboxEventStatus.PENDING;
+    availableAt = now.plus(retryDelay);
+  }
+
+  private String sanitizedError(String errorMessage) {
+    if (errorMessage == null || errorMessage.isBlank()) {
+      return "Publish failed";
+    }
+    return errorMessage.length() > 4000 ? errorMessage.substring(0, 4000) : errorMessage;
   }
 }

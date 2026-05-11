@@ -12,7 +12,8 @@ public record AgentRabbitTopologyProperties(
     Duration resultQueueTtl,
     Duration dlqTtl,
     int taskQueueMaxLength,
-    RetryDelays retryDelays) {
+    RetryDelays retryDelays,
+    Outbox outbox) {
 
   public record Exchanges(String topic, String retry, String dlq) {}
 
@@ -32,4 +33,12 @@ public record AgentRabbitTopologyProperties(
       String retry15s) {}
 
   public record RetryDelays(Duration retry1s, Duration retry5s, Duration retry15s) {}
+
+  public record Outbox(
+      boolean enabled,
+      Duration fixedDelay,
+      Duration confirmTimeout,
+      Duration retryDelay,
+      int maxAttempts,
+      Duration staleThreshold) {}
 }

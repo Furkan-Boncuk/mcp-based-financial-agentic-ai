@@ -139,4 +139,10 @@ public class AgentTask {
   public Instant completedAt() {
     return completedAt;
   }
+
+  public void markQueued() {
+    if (status == AgentTaskStatus.PENDING) {
+      status = AgentTaskStatus.QUEUED;
+    }
+  }
 }

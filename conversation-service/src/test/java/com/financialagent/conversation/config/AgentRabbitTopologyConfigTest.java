@@ -46,7 +46,14 @@ class AgentRabbitTopologyConfigTest {
             Duration.ofDays(7),
             10_000,
             new AgentRabbitTopologyProperties.RetryDelays(
-                Duration.ofSeconds(1), Duration.ofSeconds(5), Duration.ofSeconds(15)));
+                Duration.ofSeconds(1), Duration.ofSeconds(5), Duration.ofSeconds(15)),
+            new AgentRabbitTopologyProperties.Outbox(
+                true,
+                Duration.ofSeconds(5),
+                Duration.ofSeconds(5),
+                Duration.ofSeconds(10),
+                10,
+                Duration.ofMinutes(5)));
     config = new AgentRabbitTopologyConfig(properties);
   }
 
