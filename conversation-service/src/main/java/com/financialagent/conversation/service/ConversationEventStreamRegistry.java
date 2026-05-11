@@ -1,5 +1,6 @@
 package com.financialagent.conversation.service;
 
+import com.financialagent.conversation.domain.AgentSseEvent;
 import java.io.IOException;
 import java.util.Map;
 import java.util.Set;
@@ -33,11 +34,37 @@ public class ConversationEventStreamRegistry {
             emitters.forEach(emitter -> sendHeartbeat(conversationId, emitter)));
   }
 
+  public void send(AgentSseEvent event) {
+    Set<SseEmitter> emitters =
+        emittersByConversationId.getOrDefault(event.conversationId(), Set.of());
+    emitters.forEach(emitter -> sendEvent(event, emitter));
+  }
+
+  void replay(SseEmitter emitter, AgentSseEvent event) {
+    sendEvent(event, emitter);
+  }
+
   private void sendHeartbeat(UUID conversationId, SseEmitter emitter) {
     try {
       emitter.send(SseEmitter.event().comment("heartbeat"));
     } catch (IOException | IllegalStateException exception) {
       remove(conversationId, emitter);
+      emitter.completeWithError(exception);
+    }
+  }
+
+  private void sendEvent(AgentSseEvent event, SseEmitter emitter) {
+    try {
+      emitter.send(
+          SseEmitter.event()
+              .id(event.id().toString())
+              .name(event.eventName())
+              .data(event.payload()));
+      if (event.terminal()) {
+        emitter.complete();
+      }
+    } catch (IOException | IllegalStateException exception) {
+      remove(event.conversationId(), emitter);
       emitter.completeWithError(exception);
     }
   }

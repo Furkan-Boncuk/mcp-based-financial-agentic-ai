@@ -44,6 +44,7 @@ conversation:
   sse:
     timeout: ${CONVERSATION_SSE_TIMEOUT:30m}
     heartbeat-interval: ${CONVERSATION_SSE_HEARTBEAT_INTERVAL:15s}
+    replay-limit: ${CONVERSATION_SSE_REPLAY_LIMIT:10}
 
 agent:
   rabbitmq:

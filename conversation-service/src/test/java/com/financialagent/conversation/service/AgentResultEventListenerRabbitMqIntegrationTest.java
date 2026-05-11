@@ -118,6 +118,8 @@ class AgentResultEventListenerRabbitMqIntegrationTest {
     ProcessedEventRepository processedEventRepository = mock(ProcessedEventRepository.class);
     AgentProgressEventRepository agentProgressEventRepository =
         mock(AgentProgressEventRepository.class);
+    ConversationEventStreamService conversationEventStreamService =
+        mock(ConversationEventStreamService.class);
     when(processedEventRepository.existsByIdEventId(eventId)).thenReturn(false, true);
     when(agentTaskRepository.findById(agentTask.id())).thenReturn(Optional.of(agentTask));
     when(messageRepository.existsAssistantMessageForAgentTask(agentTask.id())).thenReturn(false);
@@ -128,6 +130,7 @@ class AgentResultEventListenerRabbitMqIntegrationTest {
             messageRepository,
             processedEventRepository,
             agentProgressEventRepository,
+            conversationEventStreamService,
             Clock.fixed(Instant.parse("2026-05-11T10:00:00Z"), ZoneOffset.UTC)));
 
     RabbitTemplate rabbitTemplate = rabbitTemplate();

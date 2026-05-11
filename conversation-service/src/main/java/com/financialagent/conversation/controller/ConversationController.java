@@ -98,8 +98,11 @@ public class ConversationController {
       value = "/conversations/{conversationId}/events",
       produces = MediaType.TEXT_EVENT_STREAM_VALUE)
   public SseEmitter streamConversationEvents(
-      @AuthenticatedUserId UUID userId, @PathVariable("conversationId") UUID conversationId) {
-    return conversationEventStreamService.openConversationStream(userId, conversationId);
+      @AuthenticatedUserId UUID userId,
+      @PathVariable("conversationId") UUID conversationId,
+      @RequestHeader(value = "Last-Event-ID", required = false) String lastEventId) {
+    return conversationEventStreamService.openConversationStream(
+        userId, conversationId, lastEventId);
   }
 
   @GetMapping("/agent-tasks/{agentTaskId}")

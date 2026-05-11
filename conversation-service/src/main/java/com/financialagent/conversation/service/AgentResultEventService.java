@@ -3,6 +3,7 @@ package com.financialagent.conversation.service;
 import com.financialagent.conversation.common.exception.ErrorCode;
 import com.financialagent.conversation.common.exception.ServiceException;
 import com.financialagent.conversation.domain.AgentProgressEvent;
+import com.financialagent.conversation.domain.AgentSseEvent;
 import com.financialagent.conversation.domain.AgentTask;
 import com.financialagent.conversation.domain.Message;
 import com.financialagent.conversation.domain.MessageRole;
@@ -31,6 +32,7 @@ public class AgentResultEventService {
   private final MessageRepository messageRepository;
   private final ProcessedEventRepository processedEventRepository;
   private final AgentProgressEventRepository agentProgressEventRepository;
+  private final ConversationEventStreamService conversationEventStreamService;
   private final Clock clock;
 
   public AgentResultEventService(
@@ -38,11 +40,13 @@ public class AgentResultEventService {
       MessageRepository messageRepository,
       ProcessedEventRepository processedEventRepository,
       AgentProgressEventRepository agentProgressEventRepository,
+      ConversationEventStreamService conversationEventStreamService,
       Clock clock) {
     this.agentTaskRepository = agentTaskRepository;
     this.messageRepository = messageRepository;
     this.processedEventRepository = processedEventRepository;
     this.agentProgressEventRepository = agentProgressEventRepository;
+    this.conversationEventStreamService = conversationEventStreamService;
     this.clock = clock;
   }
 
@@ -103,6 +107,8 @@ public class AgentResultEventService {
             string(payload, "toolStatus"),
             payload,
             instant(payload, "occurredAt", Instant.now(clock))));
+    publishSseEvent(
+        "agent-progress", payload, false, instant(payload, "occurredAt", Instant.now(clock)));
   }
 
   private void handleCompleted(AgentTask agentTask, Map<String, Object> payload) {
@@ -119,6 +125,10 @@ public class AgentResultEventService {
               requiredString(payload, "finalAnswer"),
               assistantMessageMetadata(agentTask.id(), metadata)));
     }
+    if (changed) {
+      publishSseEvent(
+          "agent-completed", payload, true, instant(payload, "completedAt", Instant.now(clock)));
+    }
   }
 
   private void handleFailed(AgentTask agentTask, Map<String, Object> payload) {
@@ -128,6 +138,10 @@ public class AgentResultEventService {
             string(payload, "errorMessage"),
             instant(payload, "failedAt", Instant.now(clock)));
     saveOrLogInvalid(agentTask, "AgentFailed", changed);
+    if (changed) {
+      publishSseEvent(
+          "agent-failed", payload, true, instant(payload, "failedAt", Instant.now(clock)));
+    }
   }
 
   private void handleDeadLettered(AgentTask agentTask, Map<String, Object> payload) {
@@ -136,6 +150,13 @@ public class AgentResultEventService {
             string(payload, "finalErrorCode"),
             instant(payload, "deadLetteredAt", Instant.now(clock)));
     saveOrLogInvalid(agentTask, "AgentDeadLettered", changed);
+    if (changed) {
+      publishSseEvent(
+          "agent-deadlettered",
+          payload,
+          true,
+          instant(payload, "deadLetteredAt", Instant.now(clock)));
+    }
   }
 
   private void saveOrLogInvalid(AgentTask agentTask, String eventName, boolean changed) {
@@ -163,6 +184,20 @@ public class AgentResultEventService {
     Map<String, Object> metadata = new LinkedHashMap<>(completionMetadata);
     metadata.put("agentTaskId", agentTaskId.toString());
     return metadata;
+  }
+
+  private void publishSseEvent(
+      String eventName, Map<String, Object> payload, boolean terminal, Instant occurredAt) {
+    conversationEventStreamService.persistAndPublish(
+        new AgentSseEvent(
+            uuid(payload, "eventId"),
+            uuid(payload, "conversationId"),
+            uuid(payload, "agentTaskId"),
+            uuid(payload, "userId"),
+            eventName,
+            payload,
+            terminal,
+            occurredAt));
   }
 
   private void putIfPresent(Map<String, Object> target, String key, Object value) {

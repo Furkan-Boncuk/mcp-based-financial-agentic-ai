@@ -257,7 +257,7 @@ class ConversationControllerTest {
   void streamConversationEventsOpensSseConnectionForOwner() throws Exception {
     UUID userId = UUID.randomUUID();
     UUID conversationId = UUID.randomUUID();
-    when(conversationEventStreamService.openConversationStream(userId, conversationId))
+    when(conversationEventStreamService.openConversationStream(userId, conversationId, null))
         .thenReturn(new SseEmitter(1_000L));
 
     mockMvc
@@ -267,14 +267,14 @@ class ConversationControllerTest {
         .andExpect(status().isOk())
         .andExpect(request().asyncStarted());
 
-    verify(conversationEventStreamService).openConversationStream(userId, conversationId);
+    verify(conversationEventStreamService).openConversationStream(userId, conversationId, null);
   }
 
   @Test
   void streamConversationEventsRejectsNonOwner() throws Exception {
     UUID userId = UUID.randomUUID();
     UUID conversationId = UUID.randomUUID();
-    when(conversationEventStreamService.openConversationStream(userId, conversationId))
+    when(conversationEventStreamService.openConversationStream(userId, conversationId, null))
         .thenThrow(new ServiceException(ErrorCode.CONVERSATION_ACCESS_DENIED));
 
     mockMvc

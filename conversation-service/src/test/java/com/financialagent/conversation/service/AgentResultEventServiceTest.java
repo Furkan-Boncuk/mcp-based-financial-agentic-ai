@@ -7,6 +7,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.financialagent.conversation.domain.AgentProgressEvent;
+import com.financialagent.conversation.domain.AgentSseEvent;
 import com.financialagent.conversation.domain.AgentTask;
 import com.financialagent.conversation.domain.AgentTaskStatus;
 import com.financialagent.conversation.domain.Message;
@@ -40,6 +41,7 @@ class AgentResultEventServiceTest {
   @Mock private MessageRepository messageRepository;
   @Mock private ProcessedEventRepository processedEventRepository;
   @Mock private AgentProgressEventRepository agentProgressEventRepository;
+  @Mock private ConversationEventStreamService conversationEventStreamService;
 
   private AgentResultEventService service;
 
@@ -51,6 +53,7 @@ class AgentResultEventServiceTest {
             messageRepository,
             processedEventRepository,
             agentProgressEventRepository,
+            conversationEventStreamService,
             CLOCK);
   }
 
@@ -89,6 +92,10 @@ class AgentResultEventServiceTest {
     assertThat(progressCaptor.getValue().id())
         .isEqualTo(UUID.fromString((String) payload.get("eventId")));
     assertThat(progressCaptor.getValue().agentTaskId()).isEqualTo(task.id());
+    ArgumentCaptor<AgentSseEvent> sseCaptor = ArgumentCaptor.forClass(AgentSseEvent.class);
+    verify(conversationEventStreamService).persistAndPublish(sseCaptor.capture());
+    assertThat(sseCaptor.getValue().eventName()).isEqualTo("agent-progress");
+    assertThat(sseCaptor.getValue().terminal()).isFalse();
     verify(processedEventRepository).save(any(ProcessedEvent.class));
   }
 
@@ -114,6 +121,10 @@ class AgentResultEventServiceTest {
     assertThat(messageCaptor.getValue().metadata())
         .containsEntry("agentTaskId", task.id().toString())
         .containsEntry("source", "mcp_tools");
+    ArgumentCaptor<AgentSseEvent> sseCaptor = ArgumentCaptor.forClass(AgentSseEvent.class);
+    verify(conversationEventStreamService).persistAndPublish(sseCaptor.capture());
+    assertThat(sseCaptor.getValue().eventName()).isEqualTo("agent-completed");
+    assertThat(sseCaptor.getValue().terminal()).isTrue();
     verify(processedEventRepository).save(any(ProcessedEvent.class));
   }
 
@@ -131,6 +142,7 @@ class AgentResultEventServiceTest {
 
     verify(agentTaskRepository, never()).findById(any());
     verify(messageRepository, never()).save(any());
+    verify(conversationEventStreamService, never()).persistAndPublish(any());
     verify(processedEventRepository, never()).save(any());
   }
 
@@ -166,6 +178,10 @@ class AgentResultEventServiceTest {
     assertThat(task.errorCode()).isEqualTo("AGENT_PROVIDER_TIMEOUT");
     assertThat(task.errorMessage()).isEqualTo("provider timeout");
     verify(agentTaskRepository).save(task);
+    ArgumentCaptor<AgentSseEvent> sseCaptor = ArgumentCaptor.forClass(AgentSseEvent.class);
+    verify(conversationEventStreamService).persistAndPublish(sseCaptor.capture());
+    assertThat(sseCaptor.getValue().eventName()).isEqualTo("agent-failed");
+    assertThat(sseCaptor.getValue().terminal()).isTrue();
   }
 
   @Test
@@ -181,6 +197,10 @@ class AgentResultEventServiceTest {
     assertThat(task.status()).isEqualTo(AgentTaskStatus.DEAD_LETTERED);
     assertThat(task.errorCode()).isEqualTo("TOOL_EXECUTION_FAILED");
     verify(agentTaskRepository).save(task);
+    ArgumentCaptor<AgentSseEvent> sseCaptor = ArgumentCaptor.forClass(AgentSseEvent.class);
+    verify(conversationEventStreamService).persistAndPublish(sseCaptor.capture());
+    assertThat(sseCaptor.getValue().eventName()).isEqualTo("agent-deadlettered");
+    assertThat(sseCaptor.getValue().terminal()).isTrue();
   }
 
   @Test
@@ -196,6 +216,7 @@ class AgentResultEventServiceTest {
     assertThat(task.status()).isEqualTo(AgentTaskStatus.QUEUED);
     verify(agentTaskRepository, never()).save(task);
     verify(messageRepository, never()).save(any());
+    verify(conversationEventStreamService, never()).persistAndPublish(any());
     verify(processedEventRepository).save(any(ProcessedEvent.class));
   }
 

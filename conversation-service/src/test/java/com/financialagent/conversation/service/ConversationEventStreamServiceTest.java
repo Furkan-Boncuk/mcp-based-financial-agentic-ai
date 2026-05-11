@@ -8,7 +8,12 @@ import static org.mockito.Mockito.when;
 import com.financialagent.conversation.common.exception.ErrorCode;
 import com.financialagent.conversation.common.exception.ServiceException;
 import com.financialagent.conversation.config.ConversationSseProperties;
+import com.financialagent.conversation.domain.AgentSseEvent;
+import com.financialagent.conversation.repository.AgentSseEventRepository;
 import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -21,6 +26,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 class ConversationEventStreamServiceTest {
 
   @Mock private ConversationAccessService conversationAccessService;
+  @Mock private AgentSseEventRepository agentSseEventRepository;
 
   private ConversationEventStreamRegistry streamRegistry;
   private ConversationEventStreamService streamService;
@@ -32,7 +38,8 @@ class ConversationEventStreamServiceTest {
         new ConversationEventStreamService(
             conversationAccessService,
             streamRegistry,
-            new ConversationSseProperties(Duration.ofMinutes(5), Duration.ofSeconds(15)));
+            agentSseEventRepository,
+            new ConversationSseProperties(Duration.ofMinutes(5), Duration.ofSeconds(15), 10));
   }
 
   @Test
@@ -40,10 +47,11 @@ class ConversationEventStreamServiceTest {
     UUID userId = UUID.randomUUID();
     UUID conversationId = UUID.randomUUID();
 
-    SseEmitter emitter = streamService.openConversationStream(userId, conversationId);
+    SseEmitter emitter = streamService.openConversationStream(userId, conversationId, null);
 
     assertThat(emitter).isNotNull();
     verify(conversationAccessService).requireOwnedConversation(userId, conversationId);
+    verify(agentSseEventRepository).findTop10ByConversationIdOrderByOccurredAtDesc(conversationId);
   }
 
   @Test
@@ -53,9 +61,53 @@ class ConversationEventStreamServiceTest {
     when(conversationAccessService.requireOwnedConversation(userId, conversationId))
         .thenThrow(new ServiceException(ErrorCode.CONVERSATION_ACCESS_DENIED));
 
-    assertThatThrownBy(() -> streamService.openConversationStream(userId, conversationId))
+    assertThatThrownBy(() -> streamService.openConversationStream(userId, conversationId, null))
         .isInstanceOf(ServiceException.class)
         .extracting(exception -> ((ServiceException) exception).errorCode())
         .isEqualTo(ErrorCode.CONVERSATION_ACCESS_DENIED);
+  }
+
+  @Test
+  void invalidLastEventIdFallsBackToLatestReplay() {
+    UUID userId = UUID.randomUUID();
+    UUID conversationId = UUID.randomUUID();
+    org.mockito.Mockito.when(
+            agentSseEventRepository.findTop10ByConversationIdOrderByOccurredAtDesc(conversationId))
+        .thenReturn(List.of());
+
+    streamService.openConversationStream(userId, conversationId, "not-a-uuid");
+
+    verify(agentSseEventRepository).findTop10ByConversationIdOrderByOccurredAtDesc(conversationId);
+  }
+
+  @Test
+  void validLastEventIdReplaysEventsAfterThatEvent() {
+    UUID userId = UUID.randomUUID();
+    UUID conversationId = UUID.randomUUID();
+    UUID lastEventId = UUID.randomUUID();
+    Instant lastOccurredAt = Instant.parse("2026-05-11T10:00:00Z");
+    AgentSseEvent lastEvent =
+        new AgentSseEvent(
+            lastEventId,
+            conversationId,
+            UUID.randomUUID(),
+            userId,
+            "agent-progress",
+            Map.of("eventId", lastEventId.toString()),
+            false,
+            lastOccurredAt);
+    org.mockito.Mockito.when(
+            agentSseEventRepository.findByIdAndConversationId(lastEventId, conversationId))
+        .thenReturn(java.util.Optional.of(lastEvent));
+    org.mockito.Mockito.when(
+            agentSseEventRepository.findByConversationIdAndOccurredAtAfterOrderByOccurredAtAsc(
+                conversationId, lastOccurredAt))
+        .thenReturn(List.of());
+
+    streamService.openConversationStream(userId, conversationId, lastEventId.toString());
+
+    verify(agentSseEventRepository).findByIdAndConversationId(lastEventId, conversationId);
+    verify(agentSseEventRepository)
+        .findByConversationIdAndOccurredAtAfterOrderByOccurredAtAsc(conversationId, lastOccurredAt);
   }
 }
