@@ -15,6 +15,7 @@ import com.financialagent.conversation.domain.OutboxEvent;
 import com.financialagent.conversation.domain.OutboxEventStatus;
 import com.financialagent.conversation.repository.AgentTaskRepository;
 import com.financialagent.conversation.repository.OutboxEventRepository;
+import com.rabbitmq.client.GetResponse;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -65,6 +66,8 @@ class OutboxPublisherRabbitMqIntegrationTest {
         .agentRabbitDeclarables()
         .getDeclarables()
         .forEach(declarable -> declare(rabbitAdmin, declarable));
+    rabbitAdmin.purgeQueue(properties().queues().task(), false);
+    rabbitAdmin.purgeQueue(properties().queues().dlq(), false);
   }
 
   @AfterEach
@@ -130,11 +133,60 @@ class OutboxPublisherRabbitMqIntegrationTest {
     verify(agentTaskRepository).save(agentTask);
   }
 
+  @Test
+  void rejectedTaskQueueMessageIsDeadLetteredToDlq() {
+    UUID eventId = UUID.randomUUID();
+    Map<String, Object> payload =
+        Map.of(
+            "eventId", eventId.toString(),
+            "schemaVersion", "1.0",
+            "correlationId", "correlation-id",
+            "idempotencyKey", "idempotency-key",
+            "agentTaskId", UUID.randomUUID().toString(),
+            "userMessage", "Ne alayım?",
+            "occurredAt", NOW.toString());
+    RabbitTemplate rabbitTemplate = rabbitTemplate();
+    rabbitTemplate.convertAndSend(
+        properties().exchanges().topic(), properties().routingKeys().researchRequested(), payload);
+
+    Boolean rejected =
+        rabbitTemplate.execute(
+            channel -> {
+              GetResponse response =
+                  basicGetUntilFound(channel, properties().queues().task(), Duration.ofSeconds(5));
+              if (response == null) {
+                return false;
+              }
+              channel.basicReject(response.getEnvelope().getDeliveryTag(), false);
+              return true;
+            });
+
+    assertThat(rejected).isTrue();
+    Message deadLetteredMessage =
+        rabbitTemplate.receive(properties().queues().dlq(), Duration.ofSeconds(5).toMillis());
+    assertThat(deadLetteredMessage).isNotNull();
+    assertThat(deadLetteredMessage.getMessageProperties().getReceivedRoutingKey())
+        .isEqualTo(properties().routingKeys().researchDeadlettered());
+    Object deathHeader = deadLetteredMessage.getMessageProperties().getHeader("x-death");
+    assertThat(deathHeader).isNotNull();
+  }
+
   private RabbitTemplate rabbitTemplate() {
     RabbitTemplate rabbitTemplate = new RabbitTemplate(connectionFactory);
     rabbitTemplate.setMessageConverter(new Jackson2JsonMessageConverter());
     rabbitTemplate.setMandatory(true);
     return rabbitTemplate;
+  }
+
+  private GetResponse basicGetUntilFound(
+      com.rabbitmq.client.Channel channel, String queueName, Duration timeout) throws Exception {
+    long deadline = System.nanoTime() + timeout.toNanos();
+    GetResponse response = channel.basicGet(queueName, false);
+    while (response == null && System.nanoTime() < deadline) {
+      Thread.sleep(50);
+      response = channel.basicGet(queueName, false);
+    }
+    return response;
   }
 
   private void declare(RabbitAdmin rabbitAdmin, Declarable declarable) {
