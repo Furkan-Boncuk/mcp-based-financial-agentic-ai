@@ -13,6 +13,8 @@ import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitAdmin;
 import org.springframework.amqp.rabbit.listener.RabbitListenerContainerFactory;
 import org.springframework.amqp.rabbit.listener.SimpleMessageListenerContainer;
+import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
+import org.springframework.amqp.support.converter.MessageConverter;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -88,13 +90,20 @@ public class AgentRabbitTopologyConfig {
 
   @Bean
   public RabbitListenerContainerFactory<SimpleMessageListenerContainer>
-      rabbitListenerContainerFactory(ConnectionFactory connectionFactory) {
+      rabbitListenerContainerFactory(
+          ConnectionFactory connectionFactory, MessageConverter rabbitMessageConverter) {
     SimpleRabbitListenerContainerFactory factory = new SimpleRabbitListenerContainerFactory();
     factory.setConnectionFactory(connectionFactory);
     factory.setAcknowledgeMode(org.springframework.amqp.core.AcknowledgeMode.MANUAL);
     factory.setPrefetchCount(1);
     factory.setConcurrentConsumers(3);
+    factory.setMessageConverter(rabbitMessageConverter);
     return factory;
+  }
+
+  @Bean
+  public MessageConverter rabbitMessageConverter() {
+    return new Jackson2JsonMessageConverter();
   }
 
   @Bean

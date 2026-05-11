@@ -9,6 +9,7 @@ import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 import org.hibernate.annotations.JdbcTypeCode;
@@ -144,5 +145,64 @@ public class AgentTask {
     if (status == AgentTaskStatus.PENDING) {
       status = AgentTaskStatus.QUEUED;
     }
+  }
+
+  public boolean markRunning(Instant startedAt, Map<String, Object> metadata) {
+    if (status != AgentTaskStatus.QUEUED) {
+      return false;
+    }
+    status = AgentTaskStatus.RUNNING;
+    this.startedAt = startedAt;
+    mergeResultMetadata(metadata);
+    return true;
+  }
+
+  public boolean markCompleted(Instant completedAt, Map<String, Object> metadata) {
+    if (status != AgentTaskStatus.RUNNING) {
+      return false;
+    }
+    status = AgentTaskStatus.COMPLETED;
+    this.completedAt = completedAt;
+    mergeResultMetadata(metadata);
+    return true;
+  }
+
+  public boolean markFailed(String errorCode, String errorMessage, Instant failedAt) {
+    if (status != AgentTaskStatus.RUNNING) {
+      return false;
+    }
+    status = AgentTaskStatus.FAILED;
+    this.errorCode = sanitized(errorCode, 64);
+    this.errorMessage = sanitized(errorMessage, 4000);
+    this.completedAt = failedAt;
+    return true;
+  }
+
+  public boolean markDeadLettered(String errorCode, Instant deadLetteredAt) {
+    if (status != AgentTaskStatus.FAILED) {
+      return false;
+    }
+    status = AgentTaskStatus.DEAD_LETTERED;
+    this.errorCode = sanitized(errorCode, 64);
+    this.completedAt = deadLetteredAt;
+    return true;
+  }
+
+  private void mergeResultMetadata(Map<String, Object> metadata) {
+    if (metadata == null || metadata.isEmpty()) {
+      return;
+    }
+    Map<String, Object> merged =
+        new LinkedHashMap<>(resultMetadata == null ? Map.of() : resultMetadata);
+    merged.putAll(metadata);
+    resultMetadata = Map.copyOf(merged);
+  }
+
+  private String sanitized(String value, int maxLength) {
+    if (value == null || value.isBlank()) {
+      return null;
+    }
+    String trimmed = value.trim();
+    return trimmed.length() > maxLength ? trimmed.substring(0, maxLength) : trimmed;
   }
 }
