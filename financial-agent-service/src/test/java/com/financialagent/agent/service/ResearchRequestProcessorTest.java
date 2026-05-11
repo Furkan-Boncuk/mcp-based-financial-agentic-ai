@@ -6,6 +6,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.financialagent.agent.config.AgentProcessingProperties;
 import com.financialagent.agent.dto.AgentProgressUpdate;
 import com.financialagent.agent.dto.AgentResearchResult;
 import com.financialagent.agent.dto.ResearchRequestedEvent;
@@ -35,7 +36,10 @@ class ResearchRequestProcessorTest {
   void setUp() {
     processor =
         new ResearchRequestProcessor(
-            processedAgentRequestRepository, lifecycleEventPublisher, researchAgentUseCase);
+            processedAgentRequestRepository,
+            lifecycleEventPublisher,
+            researchAgentUseCase,
+            new AgentProcessingProperties(3));
   }
 
   @Test
@@ -81,8 +85,8 @@ class ResearchRequestProcessorTest {
   }
 
   @Test
-  void processingFailurePublishesAgentFailedAndKeepsMessageProcessed() {
-    ResearchRequestedEvent request = request();
+  void retryableProcessingFailurePublishesAgentFailedAndRetry() {
+    ResearchRequestedEvent request = request(1);
     when(processedAgentRequestRepository.tryClaim(
             request.eventId(), request.idempotencyKey(), request.agentTaskId()))
         .thenReturn(true);
@@ -94,7 +98,27 @@ class ResearchRequestProcessorTest {
     Assertions.assertThat(result).isEqualTo(ResearchRequestProcessor.ProcessingResult.PROCESSED);
     verify(lifecycleEventPublisher).publishStarted(request);
     verify(lifecycleEventPublisher).publishFailed(request, "TOOL_EXECUTION_FAILED", true);
+    verify(lifecycleEventPublisher).publishRetry(request);
     verify(lifecycleEventPublisher, never()).publishCompleted(eq(request), any());
+    verify(lifecycleEventPublisher, never()).publishDeadLettered(eq(request), any());
+  }
+
+  @Test
+  void maxAttemptFailurePublishesAgentFailedAndDeadLettered() {
+    ResearchRequestedEvent request = request(3);
+    when(processedAgentRequestRepository.tryClaim(
+            request.eventId(), request.idempotencyKey(), request.agentTaskId()))
+        .thenReturn(true);
+    when(researchAgentUseCase.execute(eq(request), any()))
+        .thenThrow(new IllegalStateException("boom"));
+
+    ResearchRequestProcessor.ProcessingResult result = processor.process(request);
+
+    Assertions.assertThat(result).isEqualTo(ResearchRequestProcessor.ProcessingResult.PROCESSED);
+    verify(lifecycleEventPublisher).publishStarted(request);
+    verify(lifecycleEventPublisher).publishFailed(request, "TOOL_EXECUTION_FAILED", false);
+    verify(lifecycleEventPublisher).publishDeadLettered(request, "TOOL_EXECUTION_FAILED");
+    verify(lifecycleEventPublisher, never()).publishRetry(request);
   }
 
   @Test
@@ -112,6 +136,10 @@ class ResearchRequestProcessorTest {
   }
 
   private ResearchRequestedEvent request() {
+    return request(1);
+  }
+
+  private ResearchRequestedEvent request(int attemptNumber) {
     return new ResearchRequestedEvent(
         UUID.randomUUID(),
         "1.0",
@@ -123,6 +151,7 @@ class ResearchRequestProcessorTest {
         UUID.randomUUID(),
         "Ne alayım?",
         Instant.parse("2026-05-11T10:00:00Z"),
-        "BIST_STOCK");
+        "BIST_STOCK",
+        attemptNumber);
   }
 }

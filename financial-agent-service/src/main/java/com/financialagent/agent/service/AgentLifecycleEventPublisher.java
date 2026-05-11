@@ -71,10 +71,26 @@ public class AgentLifecycleEventPublisher {
     event.put("errorMessage", "Agent processing failed");
     event.put("retryable", retryable);
     event.put("failedAt", failedAt.toString());
-    event.put("attemptNumber", 1);
+    event.put("attemptNumber", request.attemptNumber());
 
     rabbitTemplate.convertAndSend(
         properties.exchanges().topic(), properties.routingKeys().researchFailed(), event);
+  }
+
+  public void publishRetry(ResearchRequestedEvent request) {
+    Map<String, Object> event = researchRequestedPayload(request, request.attemptNumber() + 1);
+    rabbitTemplate.convertAndSend(
+        properties.exchanges().retry(), retryRoutingKey(request.attemptNumber()), event);
+  }
+
+  public void publishDeadLettered(ResearchRequestedEvent request, String finalErrorCode) {
+    Instant deadLetteredAt = Instant.now(clock);
+    Map<String, Object> event = baseEvent(request);
+    event.put("finalErrorCode", finalErrorCode);
+    event.put("deadLetteredAt", deadLetteredAt.toString());
+
+    rabbitTemplate.convertAndSend(
+        properties.exchanges().topic(), properties.routingKeys().researchDeadlettered(), event);
   }
 
   private Map<String, Object> baseEvent(ResearchRequestedEvent request) {
@@ -97,5 +113,33 @@ public class AgentLifecycleEventPublisher {
 
   private String nullToEmpty(String value) {
     return value == null ? "" : value;
+  }
+
+  private Map<String, Object> researchRequestedPayload(
+      ResearchRequestedEvent request, int attemptNumber) {
+    Map<String, Object> event = new LinkedHashMap<>();
+    event.put("eventId", UUID.randomUUID().toString());
+    event.put("schemaVersion", request.schemaVersion());
+    event.put("correlationId", request.correlationId());
+    event.put("idempotencyKey", request.idempotencyKey());
+    event.put("userId", request.userId().toString());
+    event.put("conversationId", request.conversationId().toString());
+    event.put("messageId", request.messageId().toString());
+    event.put("agentTaskId", request.agentTaskId().toString());
+    event.put("userMessage", request.userMessage());
+    event.put("occurredAt", Instant.now(clock).toString());
+    event.put("intentHint", request.intentHint());
+    event.put("attemptNumber", attemptNumber);
+    return event;
+  }
+
+  private String retryRoutingKey(int attemptNumber) {
+    if (attemptNumber <= 1) {
+      return properties.routingKeys().retry1s();
+    }
+    if (attemptNumber == 2) {
+      return properties.routingKeys().retry5s();
+    }
+    return properties.routingKeys().retry15s();
   }
 }

@@ -15,7 +15,8 @@ public record ResearchRequestedEvent(
     UUID agentTaskId,
     String userMessage,
     Instant occurredAt,
-    String intentHint) {
+    String intentHint,
+    int attemptNumber) {
 
   public static ResearchRequestedEvent from(Map<String, Object> payload) {
     return new ResearchRequestedEvent(
@@ -29,7 +30,8 @@ public record ResearchRequestedEvent(
         uuid(payload, "agentTaskId"),
         requiredString(payload, "userMessage"),
         instant(payload, "occurredAt"),
-        string(payload, "intentHint"));
+        string(payload, "intentHint"),
+        positiveInt(payload, "attemptNumber", 1));
   }
 
   private static UUID uuid(Map<String, Object> payload, String key) {
@@ -51,5 +53,14 @@ public record ResearchRequestedEvent(
   private static String string(Map<String, Object> payload, String key) {
     Object value = payload.get(key);
     return value == null ? null : value.toString();
+  }
+
+  private static int positiveInt(Map<String, Object> payload, String key, int defaultValue) {
+    String value = string(payload, key);
+    if (value == null || value.isBlank()) {
+      return defaultValue;
+    }
+    int parsed = Integer.parseInt(value);
+    return parsed <= 0 ? defaultValue : parsed;
   }
 }

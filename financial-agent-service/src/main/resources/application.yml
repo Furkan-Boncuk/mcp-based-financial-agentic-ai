@@ -65,3 +65,5 @@ agent:
       retry-1s: 1s
       retry-5s: 5s
       retry-15s: 15s
+  processing:
+    max-attempts: ${AGENT_PROCESSING_MAX_ATTEMPTS:3}

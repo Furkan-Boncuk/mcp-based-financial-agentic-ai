@@ -127,6 +127,54 @@ class AgentLifecycleEventPublisherTest {
         .containsEntry("attemptNumber", 1);
   }
 
+  @Test
+  void publishRetrySendsResearchRequestedToRetryExchangeWithNextAttempt() {
+    RabbitTemplate rabbitTemplate = org.mockito.Mockito.mock(RabbitTemplate.class);
+    AgentLifecycleEventPublisher publisher =
+        new AgentLifecycleEventPublisher(
+            rabbitTemplate, properties(), Clock.fixed(NOW, ZoneOffset.UTC));
+    ResearchRequestedEvent request = request();
+
+    publisher.publishRetry(request);
+
+    ArgumentCaptor<Map<String, Object>> eventCaptor = ArgumentCaptor.forClass(Map.class);
+    verify(rabbitTemplate)
+        .convertAndSend(
+            eq("agent.retry.exchange"),
+            eq("agent.research.requested.retry.1s"),
+            eventCaptor.capture());
+    Assertions.assertThat(eventCaptor.getValue())
+        .containsEntry("schemaVersion", "1.0")
+        .containsEntry("correlationId", request.correlationId())
+        .containsEntry("idempotencyKey", request.idempotencyKey())
+        .containsEntry("agentTaskId", request.agentTaskId().toString())
+        .containsEntry("userMessage", request.userMessage())
+        .containsEntry("attemptNumber", 2);
+    Assertions.assertThat(eventCaptor.getValue().get("eventId")).isNotEqualTo(request.eventId());
+  }
+
+  @Test
+  void publishDeadLetteredSendsAgentDeadLetteredContractToTopicExchange() {
+    RabbitTemplate rabbitTemplate = org.mockito.Mockito.mock(RabbitTemplate.class);
+    AgentLifecycleEventPublisher publisher =
+        new AgentLifecycleEventPublisher(
+            rabbitTemplate, properties(), Clock.fixed(NOW, ZoneOffset.UTC));
+    ResearchRequestedEvent request = request();
+
+    publisher.publishDeadLettered(request, "TOOL_EXECUTION_FAILED");
+
+    ArgumentCaptor<Map<String, Object>> eventCaptor = ArgumentCaptor.forClass(Map.class);
+    verify(rabbitTemplate)
+        .convertAndSend(
+            eq("agent.topic.exchange"), eq("agent.research.deadlettered"), eventCaptor.capture());
+    Assertions.assertThat(eventCaptor.getValue())
+        .containsEntry("schemaVersion", "1.0")
+        .containsEntry("correlationId", request.correlationId())
+        .containsEntry("agentTaskId", request.agentTaskId().toString())
+        .containsEntry("finalErrorCode", "TOOL_EXECUTION_FAILED")
+        .containsEntry("deadLetteredAt", NOW.toString());
+  }
+
   private ResearchRequestedEvent request() {
     return new ResearchRequestedEvent(
         UUID.randomUUID(),
@@ -139,7 +187,8 @@ class AgentLifecycleEventPublisherTest {
         UUID.randomUUID(),
         "Ne alayım?",
         NOW.minusSeconds(1),
-        "BIST_STOCK");
+        "BIST_STOCK",
+        1);
   }
 
   private AgentRabbitTopologyProperties properties() {
