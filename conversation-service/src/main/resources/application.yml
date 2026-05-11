@@ -4,6 +4,18 @@ server:
 spring:
   application:
     name: conversation-service
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    listener:
+      simple:
+        acknowledge-mode: manual
+        prefetch: 1
+        concurrency: 3
   datasource:
     url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:mcp_db}
     username: ${POSTGRES_USER:postgres}
@@ -27,3 +39,36 @@ management:
     web:
       exposure:
         include: health,info
+
+agent:
+  rabbitmq:
+    exchanges:
+      topic: agent.topic.exchange
+      retry: agent.retry.exchange
+      dlq: agent.dlq.exchange
+    queues:
+      task: agent.task.queue
+      result: agent.result.queue
+      retry-1s: agent.task.queue.retry.1s
+      retry-5s: agent.task.queue.retry.5s
+      retry-15s: agent.task.queue.retry.15s
+      dlq: agent.dlq
+    routing-keys:
+      research-requested: agent.research.requested
+      research-started: agent.research.started
+      research-progressed: agent.research.progressed
+      research-completed: agent.research.completed
+      research-failed: agent.research.failed
+      research-deadlettered: agent.research.deadlettered
+      result-pattern: agent.research.*
+      retry-1s: agent.research.requested.retry.1s
+      retry-5s: agent.research.requested.retry.5s
+      retry-15s: agent.research.requested.retry.15s
+    task-queue-ttl: 1h
+    result-queue-ttl: 1h
+    dlq-ttl: 7d
+    task-queue-max-length: 10000
+    retry-delays:
+      retry-1s: 1s
+      retry-5s: 5s
+      retry-15s: 15s
