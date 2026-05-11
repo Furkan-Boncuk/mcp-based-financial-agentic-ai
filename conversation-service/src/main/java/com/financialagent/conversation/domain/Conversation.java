@@ -38,9 +38,13 @@ public class Conversation {
   protected Conversation() {}
 
   public Conversation(UUID userId, String title, String description) {
+    this.id = UUID.randomUUID();
     this.userId = userId;
     this.title = title;
     this.description = description;
+    Instant now = Instant.now();
+    this.createdAt = now;
+    this.updatedAt = now;
   }
 
   @PrePersist
@@ -49,8 +53,12 @@ public class Conversation {
     if (id == null) {
       id = UUID.randomUUID();
     }
-    createdAt = now;
-    updatedAt = now;
+    if (createdAt == null) {
+      createdAt = now;
+    }
+    if (updatedAt == null) {
+      updatedAt = now;
+    }
   }
 
   @PreUpdate

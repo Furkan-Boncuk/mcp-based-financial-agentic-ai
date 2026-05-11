@@ -60,11 +60,15 @@ public class AgentTask {
   protected AgentTask() {}
 
   public AgentTask(UUID conversationId, UUID messageId, UUID userId) {
+    this.id = UUID.randomUUID();
     this.conversationId = conversationId;
     this.messageId = messageId;
     this.userId = userId;
     this.status = AgentTaskStatus.PENDING;
     this.resultMetadata = Map.of();
+    Instant now = Instant.now();
+    this.createdAt = now;
+    this.updatedAt = now;
   }
 
   @PrePersist
@@ -79,8 +83,12 @@ public class AgentTask {
     if (resultMetadata == null) {
       resultMetadata = Map.of();
     }
-    createdAt = now;
-    updatedAt = now;
+    if (createdAt == null) {
+      createdAt = now;
+    }
+    if (updatedAt == null) {
+      updatedAt = now;
+    }
   }
 
   @PreUpdate

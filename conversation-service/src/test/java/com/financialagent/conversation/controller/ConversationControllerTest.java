@@ -15,10 +15,12 @@ import com.financialagent.conversation.common.exception.ErrorCode;
 import com.financialagent.conversation.common.exception.GlobalExceptionHandler;
 import com.financialagent.conversation.common.exception.ServiceException;
 import com.financialagent.conversation.common.web.AuthenticatedUserIdArgumentResolver;
+import com.financialagent.conversation.dto.AgentTaskRefResponse;
 import com.financialagent.conversation.dto.AgentTaskResponse;
 import com.financialagent.conversation.dto.ConversationResponse;
 import com.financialagent.conversation.dto.MessageResponse;
 import com.financialagent.conversation.service.ConversationService;
+import com.financialagent.conversation.service.MessageSubmitService;
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
@@ -40,6 +42,7 @@ class ConversationControllerTest {
   private static final Instant NOW = Instant.parse("2026-05-09T10:00:00Z");
 
   @Mock private ConversationService conversationService;
+  @Mock private MessageSubmitService messageSubmitService;
 
   private MockMvc mockMvc;
 
@@ -48,7 +51,8 @@ class ConversationControllerTest {
     LocalValidatorFactoryBean validator = new LocalValidatorFactoryBean();
     validator.afterPropertiesSet();
     mockMvc =
-        MockMvcBuilders.standaloneSetup(new ConversationController(conversationService))
+        MockMvcBuilders.standaloneSetup(
+                new ConversationController(conversationService, messageSubmitService))
             .setValidator(validator)
             .setCustomArgumentResolvers(
                 new AuthenticatedUserIdArgumentResolver(),
@@ -176,6 +180,58 @@ class ConversationControllerTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.content[0].id").value(messageId.toString()))
         .andExpect(jsonPath("$.content[0].role").value("USER"));
+  }
+
+  @Test
+  void submitMessageReturnsAcceptedTaskReference() throws Exception {
+    UUID userId = UUID.randomUUID();
+    UUID conversationId = UUID.randomUUID();
+    UUID messageId = UUID.randomUUID();
+    UUID agentTaskId = UUID.randomUUID();
+    when(messageSubmitService.submitMessage(eq(userId), eq(conversationId), eq("idem-key"), any()))
+        .thenReturn(new AgentTaskRefResponse(messageId, agentTaskId, "PENDING", NOW));
+
+    mockMvc
+        .perform(
+            post("/api/v1/conversations/{conversationId}/messages", conversationId)
+                .header(AuthenticatedUserIdArgumentResolver.AUTH_USER_ID_HEADER, userId.toString())
+                .header("Idempotency-Key", "idem-key")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    """
+                    {
+                      "content": "Ne alayım?",
+                      "metadata": {"source": "curl"}
+                    }
+                    """))
+        .andExpect(status().isAccepted())
+        .andExpect(jsonPath("$.messageId").value(messageId.toString()))
+        .andExpect(jsonPath("$.agentTaskId").value(agentTaskId.toString()))
+        .andExpect(jsonPath("$.agentTaskStatus").value("PENDING"));
+  }
+
+  @Test
+  void submitMessageMissingIdempotencyKeyReturnsBadRequest() throws Exception {
+    UUID userId = UUID.randomUUID();
+    UUID conversationId = UUID.randomUUID();
+    when(messageSubmitService.submitMessage(eq(userId), eq(conversationId), eq(null), any()))
+        .thenThrow(
+            new ServiceException(
+                ErrorCode.VALIDATION_FAILED, "Idempotency-Key header is required"));
+
+    mockMvc
+        .perform(
+            post("/api/v1/conversations/{conversationId}/messages", conversationId)
+                .header(AuthenticatedUserIdArgumentResolver.AUTH_USER_ID_HEADER, userId.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    """
+                    {
+                      "content": "Ne alayım?"
+                    }
+                    """))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.title").value("VALIDATION_FAILED"));
   }
 
   @Test

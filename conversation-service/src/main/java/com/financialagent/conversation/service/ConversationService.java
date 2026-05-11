@@ -24,16 +24,19 @@ public class ConversationService {
   private final ConversationRepository conversationRepository;
   private final MessageRepository messageRepository;
   private final AgentTaskRepository agentTaskRepository;
+  private final ConversationAccessService conversationAccessService;
   private final ConversationMapper mapper;
 
   public ConversationService(
       ConversationRepository conversationRepository,
       MessageRepository messageRepository,
       AgentTaskRepository agentTaskRepository,
+      ConversationAccessService conversationAccessService,
       ConversationMapper mapper) {
     this.conversationRepository = conversationRepository;
     this.messageRepository = messageRepository;
     this.agentTaskRepository = agentTaskRepository;
+    this.conversationAccessService = conversationAccessService;
     this.mapper = mapper;
   }
 
@@ -54,12 +57,13 @@ public class ConversationService {
 
   @Transactional(readOnly = true)
   public ConversationResponse getConversation(UUID userId, UUID conversationId) {
-    return mapper.toConversationResponse(requireOwnedConversation(userId, conversationId));
+    return mapper.toConversationResponse(
+        conversationAccessService.requireOwnedConversation(userId, conversationId));
   }
 
   @Transactional(readOnly = true)
   public Page<MessageResponse> listMessages(UUID userId, UUID conversationId, Pageable pageable) {
-    requireOwnedConversation(userId, conversationId);
+    conversationAccessService.requireOwnedConversation(userId, conversationId);
     return messageRepository
         .findByConversationIdOrderByCreatedAtAsc(conversationId, pageable)
         .map(mapper::toMessageResponse);
@@ -67,7 +71,8 @@ public class ConversationService {
 
   @Transactional
   public void deleteConversation(UUID userId, UUID conversationId) {
-    Conversation conversation = requireOwnedConversation(userId, conversationId);
+    Conversation conversation =
+        conversationAccessService.requireOwnedConversation(userId, conversationId);
     conversation.softDelete();
     conversationRepository.save(conversation);
   }
@@ -82,17 +87,6 @@ public class ConversationService {
       throw new ServiceException(ErrorCode.CONVERSATION_ACCESS_DENIED);
     }
     return mapper.toAgentTaskResponse(agentTask);
-  }
-
-  private Conversation requireOwnedConversation(UUID userId, UUID conversationId) {
-    Conversation conversation =
-        conversationRepository
-            .findByIdAndDeletedAtIsNull(conversationId)
-            .orElseThrow(() -> new ServiceException(ErrorCode.CONVERSATION_NOT_FOUND));
-    if (!conversation.userId().equals(userId)) {
-      throw new ServiceException(ErrorCode.CONVERSATION_ACCESS_DENIED);
-    }
-    return conversation;
   }
 
   private String normalizedDescription(String description) {

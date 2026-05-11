@@ -68,12 +68,14 @@ public class OutboxEvent {
   protected OutboxEvent() {}
 
   public OutboxEvent(
+      UUID id,
       String aggregateType,
       UUID aggregateId,
       String eventType,
       Map<String, Object> payload,
       String correlationId,
       String idempotencyKey) {
+    this.id = id;
     this.aggregateType = aggregateType;
     this.aggregateId = aggregateId;
     this.eventType = eventType;
@@ -82,6 +84,16 @@ public class OutboxEvent {
     this.idempotencyKey = idempotencyKey;
     this.schemaVersion = "1.0";
     this.status = OutboxEventStatus.PENDING;
+  }
+
+  public OutboxEvent(
+      String aggregateType,
+      UUID aggregateId,
+      String eventType,
+      Map<String, Object> payload,
+      String correlationId,
+      String idempotencyKey) {
+    this(null, aggregateType, aggregateId, eventType, payload, correlationId, idempotencyKey);
   }
 
   @PrePersist

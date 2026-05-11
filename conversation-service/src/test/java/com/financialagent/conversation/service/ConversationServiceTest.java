@@ -40,11 +40,14 @@ class ConversationServiceTest {
 
   @BeforeEach
   void setUp() {
+    ConversationAccessService conversationAccessService =
+        new ConversationAccessService(conversationRepository);
     conversationService =
         new ConversationService(
             conversationRepository,
             messageRepository,
             agentTaskRepository,
+            conversationAccessService,
             new ConversationMapper());
   }
 

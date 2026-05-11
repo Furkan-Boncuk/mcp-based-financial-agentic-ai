@@ -49,11 +49,13 @@ public class Message {
       MessageRole role,
       String content,
       Map<String, Object> metadata) {
+    this.id = UUID.randomUUID();
     this.conversationId = conversationId;
     this.userId = userId;
     this.role = role;
     this.content = content;
     this.metadata = metadata == null ? Map.of() : metadata;
+    this.createdAt = Instant.now();
   }
 
   @PrePersist
