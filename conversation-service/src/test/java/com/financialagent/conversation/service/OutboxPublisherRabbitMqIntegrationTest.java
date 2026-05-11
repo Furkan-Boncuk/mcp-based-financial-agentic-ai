@@ -171,6 +171,32 @@ class OutboxPublisherRabbitMqIntegrationTest {
     assertThat(deathHeader).isNotNull();
   }
 
+  @Test
+  void retryQueueRepublishesMessageToTaskQueueAfterDelay() {
+    UUID eventId = UUID.randomUUID();
+    Map<String, Object> payload =
+        Map.of(
+            "eventId", eventId.toString(),
+            "schemaVersion", "1.0",
+            "correlationId", "correlation-id",
+            "idempotencyKey", "idempotency-key",
+            "agentTaskId", UUID.randomUUID().toString(),
+            "userMessage", "Ne alayım?",
+            "occurredAt", NOW.toString());
+    RabbitTemplate rabbitTemplate = rabbitTemplate();
+
+    rabbitTemplate.convertAndSend(
+        properties().exchanges().retry(), properties().routingKeys().retry1s(), payload);
+
+    Message retriedMessage =
+        rabbitTemplate.receive(properties().queues().task(), Duration.ofSeconds(5).toMillis());
+    assertThat(retriedMessage).isNotNull();
+    assertThat(retriedMessage.getMessageProperties().getReceivedRoutingKey())
+        .isEqualTo(properties().routingKeys().researchRequested());
+    Object deathHeader = retriedMessage.getMessageProperties().getHeader("x-death");
+    assertThat(deathHeader).isNotNull();
+  }
+
   private RabbitTemplate rabbitTemplate() {
     RabbitTemplate rabbitTemplate = new RabbitTemplate(connectionFactory);
     rabbitTemplate.setMessageConverter(new Jackson2JsonMessageConverter());
