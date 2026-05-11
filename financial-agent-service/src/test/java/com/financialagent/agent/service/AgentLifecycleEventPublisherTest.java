@@ -4,11 +4,14 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 
 import com.financialagent.agent.config.AgentRabbitTopologyProperties;
+import com.financialagent.agent.dto.AgentProgressUpdate;
+import com.financialagent.agent.dto.AgentResearchResult;
 import com.financialagent.agent.dto.ResearchRequestedEvent;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.assertj.core.api.Assertions;
@@ -45,6 +48,83 @@ class AgentLifecycleEventPublisherTest {
         .containsEntry("intentDetected", "BIST_STOCK")
         .containsEntry("toolsSelectedCount", 0);
     Assertions.assertThat(eventCaptor.getValue().get("eventId")).isNotNull();
+  }
+
+  @Test
+  void publishProgressedSendsAgentProgressedContractToTopicExchange() {
+    RabbitTemplate rabbitTemplate = org.mockito.Mockito.mock(RabbitTemplate.class);
+    AgentLifecycleEventPublisher publisher =
+        new AgentLifecycleEventPublisher(
+            rabbitTemplate, properties(), Clock.fixed(NOW, ZoneOffset.UTC));
+    ResearchRequestedEvent request = request();
+    AgentProgressUpdate progress =
+        new AgentProgressUpdate("ANALYZING", "Analiz ediliyor", "", "stub", "RUNNING");
+
+    publisher.publishProgressed(request, progress);
+
+    ArgumentCaptor<Map<String, Object>> eventCaptor = ArgumentCaptor.forClass(Map.class);
+    verify(rabbitTemplate)
+        .convertAndSend(
+            eq("agent.topic.exchange"), eq("agent.research.progressed"), eventCaptor.capture());
+    Assertions.assertThat(eventCaptor.getValue())
+        .containsEntry("schemaVersion", "1.0")
+        .containsEntry("correlationId", request.correlationId())
+        .containsEntry("agentTaskId", request.agentTaskId().toString())
+        .containsEntry("stage", "ANALYZING")
+        .containsEntry("stageDetail", "Analiz ediliyor")
+        .containsEntry("toolName", "stub")
+        .containsEntry("toolStatus", "RUNNING")
+        .containsEntry("occurredAt", NOW.toString());
+  }
+
+  @Test
+  void publishCompletedSendsAgentCompletedContractToTopicExchange() {
+    RabbitTemplate rabbitTemplate = org.mockito.Mockito.mock(RabbitTemplate.class);
+    AgentLifecycleEventPublisher publisher =
+        new AgentLifecycleEventPublisher(
+            rabbitTemplate, properties(), Clock.fixed(NOW, ZoneOffset.UTC));
+    ResearchRequestedEvent request = request();
+    AgentResearchResult result =
+        new AgentResearchResult("Yanıt", List.of(), Map.of("totalTokens", 0), "llm_direct");
+
+    publisher.publishCompleted(request, result);
+
+    ArgumentCaptor<Map<String, Object>> eventCaptor = ArgumentCaptor.forClass(Map.class);
+    verify(rabbitTemplate)
+        .convertAndSend(
+            eq("agent.topic.exchange"), eq("agent.research.completed"), eventCaptor.capture());
+    Assertions.assertThat(eventCaptor.getValue())
+        .containsEntry("schemaVersion", "1.0")
+        .containsEntry("correlationId", request.correlationId())
+        .containsEntry("agentTaskId", request.agentTaskId().toString())
+        .containsEntry("finalAnswer", "Yanıt")
+        .containsEntry("completedAt", NOW.toString())
+        .containsEntry("source", "llm_direct");
+  }
+
+  @Test
+  void publishFailedSendsAgentFailedContractToTopicExchange() {
+    RabbitTemplate rabbitTemplate = org.mockito.Mockito.mock(RabbitTemplate.class);
+    AgentLifecycleEventPublisher publisher =
+        new AgentLifecycleEventPublisher(
+            rabbitTemplate, properties(), Clock.fixed(NOW, ZoneOffset.UTC));
+    ResearchRequestedEvent request = request();
+
+    publisher.publishFailed(request, "TOOL_EXECUTION_FAILED", true);
+
+    ArgumentCaptor<Map<String, Object>> eventCaptor = ArgumentCaptor.forClass(Map.class);
+    verify(rabbitTemplate)
+        .convertAndSend(
+            eq("agent.topic.exchange"), eq("agent.research.failed"), eventCaptor.capture());
+    Assertions.assertThat(eventCaptor.getValue())
+        .containsEntry("schemaVersion", "1.0")
+        .containsEntry("correlationId", request.correlationId())
+        .containsEntry("agentTaskId", request.agentTaskId().toString())
+        .containsEntry("errorCode", "TOOL_EXECUTION_FAILED")
+        .containsEntry("errorMessage", "Agent processing failed")
+        .containsEntry("retryable", true)
+        .containsEntry("failedAt", NOW.toString())
+        .containsEntry("attemptNumber", 1);
   }
 
   private ResearchRequestedEvent request() {

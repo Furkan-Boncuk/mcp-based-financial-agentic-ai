@@ -1,13 +1,20 @@
 package com.financialagent.agent.service;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.financialagent.agent.dto.AgentProgressUpdate;
+import com.financialagent.agent.dto.AgentResearchResult;
 import com.financialagent.agent.dto.ResearchRequestedEvent;
 import com.financialagent.agent.repository.ProcessedAgentRequestRepository;
 import java.time.Instant;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.function.Consumer;
 import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -20,26 +27,74 @@ class ResearchRequestProcessorTest {
 
   @Mock private ProcessedAgentRequestRepository processedAgentRequestRepository;
   @Mock private AgentLifecycleEventPublisher lifecycleEventPublisher;
+  @Mock private ResearchAgentUseCase researchAgentUseCase;
 
   private ResearchRequestProcessor processor;
 
   @BeforeEach
   void setUp() {
     processor =
-        new ResearchRequestProcessor(processedAgentRequestRepository, lifecycleEventPublisher);
+        new ResearchRequestProcessor(
+            processedAgentRequestRepository, lifecycleEventPublisher, researchAgentUseCase);
   }
 
   @Test
-  void processClaimsRequestAndPublishesStartedEvent() {
+  void processClaimsRequestAndPublishesLifecycleEvents() {
+    ResearchRequestedEvent request = request();
+    AgentResearchResult agentResult =
+        new AgentResearchResult("Yanıt", List.of(), Map.of("totalTokens", 0), "llm_direct");
+    when(processedAgentRequestRepository.tryClaim(
+            request.eventId(), request.idempotencyKey(), request.agentTaskId()))
+        .thenReturn(true);
+    when(researchAgentUseCase.execute(eq(request), any())).thenReturn(agentResult);
+
+    ResearchRequestProcessor.ProcessingResult processingResult = processor.process(request);
+
+    Assertions.assertThat(processingResult)
+        .isEqualTo(ResearchRequestProcessor.ProcessingResult.PROCESSED);
+    verify(lifecycleEventPublisher).publishStarted(request);
+    verify(researchAgentUseCase).execute(eq(request), any());
+    verify(lifecycleEventPublisher).publishCompleted(request, agentResult);
+  }
+
+  @Test
+  void progressCallbackPublishesProgressedEvent() {
+    ResearchRequestedEvent request = request();
+    AgentResearchResult result =
+        new AgentResearchResult("Yanıt", List.of(), Map.of("totalTokens", 0), "llm_direct");
+    AgentProgressUpdate progress =
+        new AgentProgressUpdate("ANALYZING", "Analiz ediliyor", "", "stub", "RUNNING");
+    when(processedAgentRequestRepository.tryClaim(
+            request.eventId(), request.idempotencyKey(), request.agentTaskId()))
+        .thenReturn(true);
+    when(researchAgentUseCase.execute(eq(request), any()))
+        .thenAnswer(
+            invocation -> {
+              Consumer<AgentProgressUpdate> callback = invocation.getArgument(1);
+              callback.accept(progress);
+              return result;
+            });
+
+    processor.process(request);
+
+    verify(lifecycleEventPublisher).publishProgressed(request, progress);
+  }
+
+  @Test
+  void processingFailurePublishesAgentFailedAndKeepsMessageProcessed() {
     ResearchRequestedEvent request = request();
     when(processedAgentRequestRepository.tryClaim(
             request.eventId(), request.idempotencyKey(), request.agentTaskId()))
         .thenReturn(true);
+    when(researchAgentUseCase.execute(eq(request), any()))
+        .thenThrow(new IllegalStateException("boom"));
 
     ResearchRequestProcessor.ProcessingResult result = processor.process(request);
 
     Assertions.assertThat(result).isEqualTo(ResearchRequestProcessor.ProcessingResult.PROCESSED);
     verify(lifecycleEventPublisher).publishStarted(request);
+    verify(lifecycleEventPublisher).publishFailed(request, "TOOL_EXECUTION_FAILED", true);
+    verify(lifecycleEventPublisher, never()).publishCompleted(eq(request), any());
   }
 
   @Test
@@ -53,6 +108,7 @@ class ResearchRequestProcessorTest {
 
     Assertions.assertThat(result).isEqualTo(ResearchRequestProcessor.ProcessingResult.DUPLICATE);
     verify(lifecycleEventPublisher, never()).publishStarted(request);
+    verify(researchAgentUseCase, never()).execute(eq(request), any());
   }
 
   private ResearchRequestedEvent request() {

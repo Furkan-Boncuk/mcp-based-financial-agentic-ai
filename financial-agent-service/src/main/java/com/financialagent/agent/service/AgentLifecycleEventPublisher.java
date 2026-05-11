@@ -1,6 +1,8 @@
 package com.financialagent.agent.service;
 
 import com.financialagent.agent.config.AgentRabbitTopologyProperties;
+import com.financialagent.agent.dto.AgentProgressUpdate;
+import com.financialagent.agent.dto.AgentResearchResult;
 import com.financialagent.agent.dto.ResearchRequestedEvent;
 import java.time.Clock;
 import java.time.Instant;
@@ -35,6 +37,46 @@ public class AgentLifecycleEventPublisher {
         properties.exchanges().topic(), properties.routingKeys().researchStarted(), event);
   }
 
+  public void publishProgressed(ResearchRequestedEvent request, AgentProgressUpdate progress) {
+    Instant occurredAt = Instant.now(clock);
+    Map<String, Object> event = baseEvent(request);
+    event.put("stage", progress.stage());
+    event.put("stageDetail", progress.stageDetail());
+    event.put("partialContent", nullToEmpty(progress.partialContent()));
+    event.put("toolName", progress.toolName());
+    event.put("toolStatus", progress.toolStatus());
+    event.put("occurredAt", occurredAt.toString());
+
+    rabbitTemplate.convertAndSend(
+        properties.exchanges().topic(), properties.routingKeys().researchProgressed(), event);
+  }
+
+  public void publishCompleted(ResearchRequestedEvent request, AgentResearchResult result) {
+    Instant completedAt = Instant.now(clock);
+    Map<String, Object> event = baseEvent(request);
+    event.put("finalAnswer", result.finalAnswer());
+    event.put("toolResults", result.toolResults());
+    event.put("tokenUsage", result.tokenUsage());
+    event.put("completedAt", completedAt.toString());
+    event.put("source", result.source());
+
+    rabbitTemplate.convertAndSend(
+        properties.exchanges().topic(), properties.routingKeys().researchCompleted(), event);
+  }
+
+  public void publishFailed(ResearchRequestedEvent request, String errorCode, boolean retryable) {
+    Instant failedAt = Instant.now(clock);
+    Map<String, Object> event = baseEvent(request);
+    event.put("errorCode", errorCode);
+    event.put("errorMessage", "Agent processing failed");
+    event.put("retryable", retryable);
+    event.put("failedAt", failedAt.toString());
+    event.put("attemptNumber", 1);
+
+    rabbitTemplate.convertAndSend(
+        properties.exchanges().topic(), properties.routingKeys().researchFailed(), event);
+  }
+
   private Map<String, Object> baseEvent(ResearchRequestedEvent request) {
     Map<String, Object> event = new LinkedHashMap<>();
     event.put("eventId", UUID.randomUUID().toString());
@@ -51,5 +93,9 @@ public class AgentLifecycleEventPublisher {
     return request.intentHint() == null || request.intentHint().isBlank()
         ? "GENERAL_FINANCE"
         : request.intentHint();
+  }
+
+  private String nullToEmpty(String value) {
+    return value == null ? "" : value;
   }
 }
