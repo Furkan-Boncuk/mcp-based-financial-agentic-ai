@@ -8,6 +8,7 @@ import com.financialagent.conversation.dto.ConversationResponse;
 import com.financialagent.conversation.dto.MessageCreateRequest;
 import com.financialagent.conversation.dto.MessageResponse;
 import com.financialagent.conversation.dto.PageResponse;
+import com.financialagent.conversation.service.ConversationEventStreamService;
 import com.financialagent.conversation.service.ConversationService;
 import com.financialagent.conversation.service.MessageSubmitService;
 import jakarta.validation.Valid;
@@ -17,6 +18,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -26,6 +28,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 @RestController
 @RequestMapping("/api/v1")
@@ -33,11 +36,15 @@ public class ConversationController {
 
   private final ConversationService conversationService;
   private final MessageSubmitService messageSubmitService;
+  private final ConversationEventStreamService conversationEventStreamService;
 
   public ConversationController(
-      ConversationService conversationService, MessageSubmitService messageSubmitService) {
+      ConversationService conversationService,
+      MessageSubmitService messageSubmitService,
+      ConversationEventStreamService conversationEventStreamService) {
     this.conversationService = conversationService;
     this.messageSubmitService = messageSubmitService;
+    this.conversationEventStreamService = conversationEventStreamService;
   }
 
   @PostMapping("/conversations")
@@ -85,6 +92,14 @@ public class ConversationController {
       @AuthenticatedUserId UUID userId, @PathVariable("conversationId") UUID conversationId) {
     conversationService.deleteConversation(userId, conversationId);
     return ResponseEntity.noContent().build();
+  }
+
+  @GetMapping(
+      value = "/conversations/{conversationId}/events",
+      produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+  public SseEmitter streamConversationEvents(
+      @AuthenticatedUserId UUID userId, @PathVariable("conversationId") UUID conversationId) {
+    return conversationEventStreamService.openConversationStream(userId, conversationId);
   }
 
   @GetMapping("/agent-tasks/{agentTaskId}")

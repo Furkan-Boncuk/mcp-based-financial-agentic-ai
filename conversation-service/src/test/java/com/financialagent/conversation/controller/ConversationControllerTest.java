@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.financialagent.conversation.common.exception.ErrorCode;
@@ -19,6 +20,7 @@ import com.financialagent.conversation.dto.AgentTaskRefResponse;
 import com.financialagent.conversation.dto.AgentTaskResponse;
 import com.financialagent.conversation.dto.ConversationResponse;
 import com.financialagent.conversation.dto.MessageResponse;
+import com.financialagent.conversation.service.ConversationEventStreamService;
 import com.financialagent.conversation.service.ConversationService;
 import com.financialagent.conversation.service.MessageSubmitService;
 import java.time.Instant;
@@ -35,6 +37,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 @ExtendWith(MockitoExtension.class)
 class ConversationControllerTest {
@@ -43,6 +46,7 @@ class ConversationControllerTest {
 
   @Mock private ConversationService conversationService;
   @Mock private MessageSubmitService messageSubmitService;
+  @Mock private ConversationEventStreamService conversationEventStreamService;
 
   private MockMvc mockMvc;
 
@@ -52,7 +56,8 @@ class ConversationControllerTest {
     validator.afterPropertiesSet();
     mockMvc =
         MockMvcBuilders.standaloneSetup(
-                new ConversationController(conversationService, messageSubmitService))
+                new ConversationController(
+                    conversationService, messageSubmitService, conversationEventStreamService))
             .setValidator(validator)
             .setCustomArgumentResolvers(
                 new AuthenticatedUserIdArgumentResolver(),
@@ -246,6 +251,38 @@ class ConversationControllerTest {
         .andExpect(status().isNoContent());
 
     verify(conversationService).deleteConversation(userId, conversationId);
+  }
+
+  @Test
+  void streamConversationEventsOpensSseConnectionForOwner() throws Exception {
+    UUID userId = UUID.randomUUID();
+    UUID conversationId = UUID.randomUUID();
+    when(conversationEventStreamService.openConversationStream(userId, conversationId))
+        .thenReturn(new SseEmitter(1_000L));
+
+    mockMvc
+        .perform(
+            get("/api/v1/conversations/{conversationId}/events", conversationId)
+                .header(AuthenticatedUserIdArgumentResolver.AUTH_USER_ID_HEADER, userId.toString()))
+        .andExpect(status().isOk())
+        .andExpect(request().asyncStarted());
+
+    verify(conversationEventStreamService).openConversationStream(userId, conversationId);
+  }
+
+  @Test
+  void streamConversationEventsRejectsNonOwner() throws Exception {
+    UUID userId = UUID.randomUUID();
+    UUID conversationId = UUID.randomUUID();
+    when(conversationEventStreamService.openConversationStream(userId, conversationId))
+        .thenThrow(new ServiceException(ErrorCode.CONVERSATION_ACCESS_DENIED));
+
+    mockMvc
+        .perform(
+            get("/api/v1/conversations/{conversationId}/events", conversationId)
+                .header(AuthenticatedUserIdArgumentResolver.AUTH_USER_ID_HEADER, userId.toString()))
+        .andExpect(status().isForbidden())
+        .andExpect(jsonPath("$.title").value("CONVERSATION_ACCESS_DENIED"));
   }
 
   @Test

@@ -40,6 +40,11 @@ management:
       exposure:
         include: health,info
 
+conversation:
+  sse:
+    timeout: ${CONVERSATION_SSE_TIMEOUT:30m}
+    heartbeat-interval: ${CONVERSATION_SSE_HEARTBEAT_INTERVAL:15s}
+
 agent:
   rabbitmq:
     exchanges:
