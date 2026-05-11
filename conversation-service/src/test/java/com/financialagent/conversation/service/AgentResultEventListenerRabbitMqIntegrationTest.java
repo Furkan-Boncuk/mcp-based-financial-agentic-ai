@@ -5,14 +5,24 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import com.financialagent.conversation.config.AgentRabbitTopologyConfig;
 import com.financialagent.conversation.config.AgentRabbitTopologyProperties;
+import com.financialagent.conversation.domain.AgentTask;
+import com.financialagent.conversation.domain.ProcessedEvent;
+import com.financialagent.conversation.repository.AgentProgressEventRepository;
+import com.financialagent.conversation.repository.AgentTaskRepository;
+import com.financialagent.conversation.repository.MessageRepository;
+import com.financialagent.conversation.repository.ProcessedEventRepository;
 import com.rabbitmq.client.Channel;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -60,15 +70,7 @@ class AgentResultEventListenerRabbitMqIntegrationTest {
         .forEach(declarable -> declare(rabbitAdmin, declarable));
 
     eventService = mock(AgentResultEventService.class);
-    AgentResultEventListener listener = new AgentResultEventListener(eventService);
-    listenerContainer = new SimpleMessageListenerContainer(connectionFactory);
-    listenerContainer.setQueueNames(properties().queues().result());
-    listenerContainer.setAcknowledgeMode(org.springframework.amqp.core.AcknowledgeMode.MANUAL);
-    listenerContainer.setPrefetchCount(1);
-    listenerContainer.setConcurrentConsumers(1);
-    listenerContainer.setMessageListener(channelAwareListener(listener));
-    listenerContainer.afterPropertiesSet();
-    listenerContainer.start();
+    startListener(eventService);
   }
 
   @AfterEach
@@ -103,6 +105,61 @@ class AgentResultEventListenerRabbitMqIntegrationTest {
         .handle(eq(properties().routingKeys().researchFailed()), anyMap());
     verify(eventService, timeout(5_000))
         .handle(eq(properties().routingKeys().researchDeadlettered()), anyMap());
+  }
+
+  @Test
+  void duplicateAgentCompletedEventIsIgnoredAfterFirstProcessing() {
+    stopListener();
+    AgentTask agentTask = runningTask();
+    UUID eventId = UUID.randomUUID();
+    Map<String, Object> payload = completedPayload(agentTask, eventId);
+    AgentTaskRepository agentTaskRepository = mock(AgentTaskRepository.class);
+    MessageRepository messageRepository = mock(MessageRepository.class);
+    ProcessedEventRepository processedEventRepository = mock(ProcessedEventRepository.class);
+    AgentProgressEventRepository agentProgressEventRepository =
+        mock(AgentProgressEventRepository.class);
+    when(processedEventRepository.existsByIdEventId(eventId)).thenReturn(false, true);
+    when(agentTaskRepository.findById(agentTask.id())).thenReturn(Optional.of(agentTask));
+    when(messageRepository.existsAssistantMessageForAgentTask(agentTask.id())).thenReturn(false);
+
+    startListener(
+        new AgentResultEventService(
+            agentTaskRepository,
+            messageRepository,
+            processedEventRepository,
+            agentProgressEventRepository,
+            Clock.fixed(Instant.parse("2026-05-11T10:00:00Z"), ZoneOffset.UTC)));
+
+    RabbitTemplate rabbitTemplate = rabbitTemplate();
+    publish(rabbitTemplate, properties().routingKeys().researchCompleted(), payload);
+    publish(rabbitTemplate, properties().routingKeys().researchCompleted(), payload);
+
+    verify(messageRepository, timeout(5_000).times(1))
+        .save(
+            org.mockito.ArgumentMatchers.any(com.financialagent.conversation.domain.Message.class));
+    verify(agentTaskRepository, timeout(5_000).times(1)).save(agentTask);
+    verify(processedEventRepository, timeout(5_000).times(1))
+        .save(org.mockito.ArgumentMatchers.any(ProcessedEvent.class));
+  }
+
+  private void startListener(AgentResultEventService listenerEventService) {
+    AgentResultEventListener listener = new AgentResultEventListener(listenerEventService);
+    listenerContainer = new SimpleMessageListenerContainer(connectionFactory);
+    listenerContainer.setQueueNames(properties().queues().result());
+    listenerContainer.setAcknowledgeMode(org.springframework.amqp.core.AcknowledgeMode.MANUAL);
+    listenerContainer.setPrefetchCount(1);
+    listenerContainer.setConcurrentConsumers(1);
+    listenerContainer.setMessageListener(channelAwareListener(listener));
+    listenerContainer.afterPropertiesSet();
+    listenerContainer.start();
+  }
+
+  private void stopListener() {
+    if (listenerContainer != null) {
+      listenerContainer.stop();
+      listenerContainer.destroy();
+      listenerContainer = null;
+    }
   }
 
   private ChannelAwareMessageListener channelAwareListener(AgentResultEventListener listener) {
@@ -144,6 +201,28 @@ class AgentResultEventListenerRabbitMqIntegrationTest {
     payload.put("finalAnswer", "Yanıt hazır.");
     payload.put("source", "mcp_tools");
     return payload;
+  }
+
+  private Map<String, Object> completedPayload(AgentTask agentTask, UUID eventId) {
+    Map<String, Object> payload = new LinkedHashMap<>();
+    payload.put("eventId", eventId.toString());
+    payload.put("schemaVersion", "1.0");
+    payload.put("correlationId", UUID.randomUUID().toString());
+    payload.put("agentTaskId", agentTask.id().toString());
+    payload.put("userId", agentTask.userId().toString());
+    payload.put("conversationId", agentTask.conversationId().toString());
+    payload.put("messageId", agentTask.messageId().toString());
+    payload.put("completedAt", Instant.parse("2026-05-11T10:00:00Z").toString());
+    payload.put("finalAnswer", "Yanıt hazır.");
+    payload.put("source", "mcp_tools");
+    return payload;
+  }
+
+  private AgentTask runningTask() {
+    AgentTask task = new AgentTask(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID());
+    task.markQueued();
+    task.markRunning(Instant.parse("2026-05-11T09:59:00Z"), Map.of());
+    return task;
   }
 
   private Map<String, Object> failedPayload() {
